@@ -15,6 +15,7 @@ final class VMHomeViewModel: ObservableObject {
     private let admissionPolicy: AdmissionPolicy
     private let configurationBuilder: VMConfigurationBuilding
     private let lifecycleController: VMLifecycleControlling
+    private let diagnosticsProvider: VMDiagnosticsProviding
     private let hostEnvironmentProvider: () -> HostEnvironment
     private let logger: Logger
 
@@ -47,11 +48,23 @@ final class VMHomeViewModel: ObservableObject {
         return !VMStateMachine.canStop(from: metadata.state)
     }
 
+    var canReplaceInstallMedia: Bool {
+        guard let metadata else {
+            return false
+        }
+        return !VMStateMachine.canStop(from: metadata.state)
+    }
+
+    var canOpenDiagnostics: Bool {
+        metadata != nil
+    }
+
     init(
         store: VMBundleStore = VMBundleStore(),
         admissionPolicy: AdmissionPolicy = AdmissionPolicy(),
         configurationBuilder: VMConfigurationBuilding? = nil,
         lifecycleController: VMLifecycleControlling? = nil,
+        diagnosticsProvider: VMDiagnosticsProviding? = nil,
         hostEnvironmentProvider: @escaping () -> HostEnvironment = { HostEnvironment.current() },
         logger: Logger = Logger(subsystem: "pro.nanzhi.AIVM", category: "VMHome")
     ) {
@@ -63,6 +76,7 @@ final class VMHomeViewModel: ObservableObject {
             store: store,
             configurationBuilder: resolvedConfigurationBuilder
         )
+        self.diagnosticsProvider = diagnosticsProvider ?? VMDiagnosticsManager(store: store)
         self.hostEnvironmentProvider = hostEnvironmentProvider
         self.logger = logger
         self.hostAdmission = admissionPolicy.evaluateHost(hostEnvironmentProvider())
@@ -73,6 +87,50 @@ final class VMHomeViewModel: ObservableObject {
         metadata = try? store.loadCurrent()
         hostAdmission = admissionPolicy.evaluateHost(hostEnvironmentProvider())
         displayVirtualMachine = lifecycleController.displayVirtualMachine
+        refreshConfigurationReadiness()
+    }
+
+    func replaceInstallMedia(from installMediaURL: URL) {
+        guard var metadata, canReplaceInstallMedia else {
+            return
+        }
+
+        let isAccessingSecurityScopedResource = installMediaURL.startAccessingSecurityScopedResource()
+        defer {
+            if isAccessingSecurityScopedResource {
+                installMediaURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let host = hostEnvironmentProvider()
+        hostAdmission = admissionPolicy.evaluateHost(host)
+        let request = VMCreationRequest(
+            displayName: metadata.displayName,
+            installMediaURL: installMediaURL,
+            resources: metadata.resources
+        )
+        let decision = admissionPolicy.evaluate(request: request, host: host)
+        creationAdmission = decision
+        guard decision.isAllowed else {
+            refreshConfigurationReadiness()
+            return
+        }
+
+        metadata.installMediaPath = installMediaURL.path
+        metadata.bootSource = .installMedia
+        metadata.state = .draft
+        metadata.updatedAt = Date()
+
+        do {
+            try store.save(metadata)
+            self.metadata = metadata
+            logger.info("VM install media changed id=\(metadata.id.uuidString, privacy: .public)")
+        } catch {
+            logger.error("VM install media change failed id=\(metadata.id.uuidString, privacy: .public)")
+            reload()
+            return
+        }
+
         refreshConfigurationReadiness()
     }
 
@@ -168,6 +226,19 @@ final class VMHomeViewModel: ObservableObject {
         } catch {
             logger.error("VM delete failed id=\(metadata.id.uuidString, privacy: .public)")
             reload()
+        }
+    }
+
+    func openDiagnostics() {
+        guard let metadata else {
+            return
+        }
+
+        do {
+            try diagnosticsProvider.openDiagnosticsDirectory(for: metadata, host: hostEnvironmentProvider())
+            logger.info("VM diagnostics opened id=\(metadata.id.uuidString, privacy: .public)")
+        } catch {
+            logger.error("VM diagnostics failed id=\(metadata.id.uuidString, privacy: .public)")
         }
     }
 

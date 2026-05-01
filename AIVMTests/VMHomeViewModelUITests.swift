@@ -79,6 +79,82 @@ final class VMHomeViewModelUITests: XCTestCase {
     }
 
     @MainActor
+    func testReplaceInstallMediaUpdatesRecoverableMetadata() throws {
+        let root = makeTemporaryRoot()
+        let store = VMBundleStore(rootDirectory: root)
+        let metadata = makeMetadata(displayName: "Ubuntu", state: .error)
+        try store.createBundle(for: metadata)
+        let replacementISO = try makeISO(named: "ubuntu-desktop-arm64.iso")
+        let viewModel = makeViewModel(store: store, root: root)
+
+        XCTAssertTrue(viewModel.canReplaceInstallMedia)
+        viewModel.replaceInstallMedia(from: replacementISO)
+
+        let updated = try XCTUnwrap(viewModel.metadata)
+        XCTAssertEqual(updated.installMediaPath, replacementISO.path)
+        XCTAssertEqual(updated.bootSource, .installMedia)
+        XCTAssertEqual(updated.state, .draft)
+        XCTAssertEqual(try store.load(id: metadata.id).installMediaPath, replacementISO.path)
+    }
+
+    @MainActor
+    func testInvalidReplacementISODoesNotMutateMetadata() throws {
+        let root = makeTemporaryRoot()
+        let store = VMBundleStore(rootDirectory: root)
+        let metadata = makeMetadata(displayName: "Ubuntu", state: .error)
+        try store.createBundle(for: metadata)
+        let replacementISO = try makeISO(named: "ubuntu-desktop-amd64.iso")
+        let viewModel = makeViewModel(store: store, root: root)
+
+        viewModel.replaceInstallMedia(from: replacementISO)
+
+        XCTAssertEqual(viewModel.metadata, metadata)
+        XCTAssertEqual(try store.load(id: metadata.id), metadata)
+        XCTAssertTrue(viewModel.creationAdmission.contains(.isoArchitectureMismatch))
+    }
+
+    @MainActor
+    func testOpenDiagnosticsUsesInjectedProvider() throws {
+        let root = makeTemporaryRoot()
+        let store = VMBundleStore(rootDirectory: root)
+        let metadata = makeMetadata(displayName: "Ubuntu", state: .error)
+        try store.createBundle(for: metadata)
+        let diagnostics = Phase6FakeDiagnosticsProvider()
+        let viewModel = makeViewModel(store: store, root: root, diagnosticsProvider: diagnostics)
+
+        viewModel.openDiagnostics()
+
+        XCTAssertEqual(diagnostics.openCallCount, 1)
+        XCTAssertEqual(diagnostics.openedMetadataID, metadata.id)
+    }
+
+    func testDiagnosticsSnapshotIsLocalAndOmitsFullInstallMediaPath() throws {
+        let root = makeTemporaryRoot()
+        let store = VMBundleStore(rootDirectory: root)
+        let metadata = makeMetadata(displayName: "Ubuntu", state: .error)
+        try store.createBundle(for: metadata)
+        FileManager.default.createFile(atPath: store.layout.diskImageURL(for: metadata.id).path, contents: Data())
+        let manager = VMDiagnosticsManager(
+            store: store,
+            appVersionProvider: { "test-version" },
+            now: { Date(timeIntervalSince1970: 1_700_000_000) }
+        )
+
+        let snapshotURL = try manager.writeSnapshot(for: metadata, host: supportedHost())
+
+        XCTAssertEqual(snapshotURL.deletingLastPathComponent(), store.layout.logsURL(for: metadata.id))
+        let data = try Data(contentsOf: snapshotURL)
+        let snapshot = try JSONDecoder.aivmDiagnostics.decode(VMDiagnosticSnapshot.self, from: data)
+        XCTAssertEqual(snapshot.vmID, metadata.id)
+        XCTAssertEqual(snapshot.vmState, .error)
+        XCTAssertEqual(snapshot.installMediaName, "ubuntu-desktop-arm64.iso")
+        XCTAssertEqual(snapshot.appVersion, "test-version")
+        XCTAssertTrue(snapshot.artifacts.diskImageExists)
+        let json = String(decoding: data, as: UTF8.self)
+        XCTAssertFalse(json.contains(metadata.installMediaPath ?? ""))
+    }
+
+    @MainActor
     func testActionAvailabilityMatchesLoadedState() throws {
         let root = makeTemporaryRoot()
         let store = VMBundleStore(rootDirectory: root)
@@ -94,11 +170,16 @@ final class VMHomeViewModelUITests: XCTestCase {
     private var gib: UInt64 { 1024 * 1024 * 1024 }
 
     @MainActor
-    private func makeViewModel(store: VMBundleStore, root: URL) -> VMHomeViewModel {
+    private func makeViewModel(
+        store: VMBundleStore,
+        root: URL,
+        diagnosticsProvider: VMDiagnosticsProviding? = nil
+    ) -> VMHomeViewModel {
         VMHomeViewModel(
             store: store,
             configurationBuilder: Phase5FakeConfigurationBuilder(result: .success(makeBuildResult(root: root))),
             lifecycleController: Phase5FakeLifecycleController(),
+            diagnosticsProvider: diagnosticsProvider,
             hostEnvironmentProvider: { self.supportedHost() }
         )
     }
@@ -154,6 +235,14 @@ final class VMHomeViewModelUITests: XCTestCase {
     }
 }
 
+private extension JSONDecoder {
+    static var aivmDiagnostics: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+}
+
 private final class Phase5FakeConfigurationBuilder: VMConfigurationBuilding {
     private let result: Result<VMConfigurationBuildResult, Error>
 
@@ -176,5 +265,20 @@ private final class Phase5FakeLifecycleController: VMLifecycleControlling {
 
     func stop(metadata: VMMetadata) async throws -> VMMetadata {
         metadata
+    }
+}
+
+private final class Phase6FakeDiagnosticsProvider: VMDiagnosticsProviding {
+    private(set) var openCallCount = 0
+    private(set) var openedMetadataID: UUID?
+
+    func writeSnapshot(for metadata: VMMetadata, host: HostEnvironment) throws -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("diagnostics.json")
+    }
+
+    func openDiagnosticsDirectory(for metadata: VMMetadata, host: HostEnvironment) throws -> URL {
+        openCallCount += 1
+        openedMetadataID = metadata.id
+        return FileManager.default.temporaryDirectory
     }
 }

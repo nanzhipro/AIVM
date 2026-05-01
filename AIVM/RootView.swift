@@ -157,6 +157,16 @@ struct RootView: View {
                 actionBar
             }
 
+            if metadata.state == .error {
+                noticeBanner(title: .startFailed, action: .retryStart)
+            } else if viewModel.configurationReadiness == .failed {
+                noticeBanner(title: .configInvalid, action: .chooseAnotherISO)
+            }
+
+            if !viewModel.creationAdmission.isAllowed {
+                issueBanner(for: viewModel.creationAdmission)
+            }
+
             Divider()
 
             HStack(alignment: .top, spacing: 24) {
@@ -201,9 +211,17 @@ struct RootView: View {
     private var actionBar: some View {
         HStack(spacing: 10) {
             Button {
+                isISOImporterPresented = true
+            } label: {
+                Label(localized(.chooseAnotherISO), systemImage: "opticaldiscdrive")
+            }
+            .disabled(!viewModel.canReplaceInstallMedia)
+            .accessibilityIdentifier(LocalizationKey.chooseAnotherISO.rawValue)
+
+            Button {
                 Task { await viewModel.startCurrentVM() }
             } label: {
-                Label(localized(.startVM), systemImage: "play.fill")
+                Label(localized(startActionKey), systemImage: "play.fill")
             }
             .disabled(!viewModel.canStartVM)
             .accessibilityIdentifier(LocalizationKey.startVM.rawValue)
@@ -216,6 +234,14 @@ struct RootView: View {
             .disabled(!viewModel.canStopVM)
             .accessibilityIdentifier(LocalizationKey.stopVM.rawValue)
 
+            Button {
+                viewModel.openDiagnostics()
+            } label: {
+                Label(localized(.viewLogs), systemImage: "doc.text.magnifyingglass")
+            }
+            .disabled(!viewModel.canOpenDiagnostics)
+            .accessibilityIdentifier(LocalizationKey.viewLogs.rawValue)
+
             Button(role: .destructive) {
                 isDeleteConfirmationPresented = true
             } label: {
@@ -224,6 +250,10 @@ struct RootView: View {
             .disabled(!viewModel.canDeleteVM)
             .accessibilityIdentifier(LocalizationKey.deleteVM.rawValue)
         }
+    }
+
+    private var startActionKey: LocalizationKey {
+        viewModel.metadata?.state == .error ? .retryStart : .startVM
     }
 
     private var vmIcon: some View {
@@ -289,11 +319,35 @@ struct RootView: View {
         )
     }
 
+    private func noticeBanner(title: LocalizationKey, action: LocalizationKey) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text(localized(title))
+                .font(.callout.weight(.medium))
+            Text(localized(action))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+        )
+    }
+
     private func handleISOSelection(_ result: Result<[URL], Error>) {
         guard case let .success(urls) = result, let url = urls.first else {
             return
         }
-        viewModel.createVM(from: url)
+        if viewModel.metadata == nil {
+            viewModel.createVM(from: url)
+        } else {
+            viewModel.replaceInstallMedia(from: url)
+        }
     }
 
     private func issueTitleKey(for issue: AdmissionIssue?) -> LocalizationKey {

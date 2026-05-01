@@ -1,0 +1,63 @@
+name: AIVM
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  xcodeVersion: "15.4"
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
+targets:
+  AIVM:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: AIVM
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: pro.nanzhi.AIVM
+        PRODUCT_NAME: AIVM
+        INFOPLIST_FILE: AIVM/Info.plist
+        CODE_SIGN_ENTITLEMENTS: AIVM/AIVM.entitlements
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: NO
+        ENABLE_HARDENED_RUNTIME: YES
+  AIVMTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: AIVMTests
+    dependencies:
+      - target: AIVM
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: pro.nanzhi.AIVMTests
+        CODE_SIGNING_ALLOWED: NO
+  AIVMUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: AIVMUITests
+    dependencies:
+      - target: AIVM
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: pro.nanzhi.AIVMUITests
+        CODE_SIGNING_ALLOWED: NO
+schemes:
+  AIVM:
+    build:
+      targets:
+        AIVM: all
+        AIVMTests: [test]
+        AIVMUITests: [test]
+    test:
+      targets:
+        - AIVMTests
+      gatherCoverageData: false

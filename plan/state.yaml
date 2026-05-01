@@ -1,0 +1,203 @@
+---
+version: 1
+completed_phases:
+- phase-0-app-shell-i18n
+completion_log:
+- phase_id: phase-0-app-shell-i18n
+  completed_at: '2026-05-01T12:40:35Z'
+  summary: Created the macOS app shell, entitlement, three-language localization baseline,
+    tests, and Phase-Contract initial milestone.
+  next_focus: Promote phase-1 VM model and bundle persistence contracts, then implement
+    persistent VM metadata and bundle storage.
+  checks:
+  - id: contract-lint
+    command: ruby scripts/planctl lint-contracts --phase phase-0-app-shell-i18n
+    exit_code: 0
+    duration_seconds: 0.002
+    status: passed
+    output_tail: |-
+      === Phase-Contract Contract Lint ===
+      Phase: phase-0-app-shell-i18n Native app shell and i18n copy foundation
+      ok: contract passes lint
+    required: true
+  - id: contract-lint
+    command: ruby scripts/planctl lint-contracts --phase phase-0-app-shell-i18n
+    exit_code: 0
+    duration_seconds: 0.104
+    status: passed
+    output_tail: |-
+      === Phase-Contract Contract Lint ===
+      Phase: phase-0-app-shell-i18n Native app shell and i18n copy foundation
+      - ok: contract passes lint
+    required: true
+  - id: xcode-project-list
+    command: xcodebuild -list -project AIVM.xcodeproj
+    exit_code: 0
+    duration_seconds: 0.996
+    status: passed
+    output_tail: |-
+      Command line invocation:
+          /Applications/Xcode15.4.app/Contents/Developer/usr/bin/xcodebuild -list -project AIVM.xcodeproj
+
+      User defaults from command line:
+          IDEPackageSupportUseBuiltinSCM = YES
+
+      Information about project "AIVM":
+          Targets:
+              AIVM
+              AIVMTests
+              AIVMUITests
+
+          Build Configurations:
+              Debug
+              Release
+
+          If no build configuration is specified and -scheme is not passed then "Debug" is used.
+
+          Schemes:
+              AIVM
+    required: true
+  - id: localization-audit
+    command: ruby scripts/audit_localizations.rb
+    exit_code: 0
+    duration_seconds: 0.088
+    status: passed
+    output_tail: "[localization-audit] ok: en, zh-Hans, ja share 21 keys"
+    required: true
+  - id: macos-build-test
+    command: xcodebuild -scheme AIVM -destination 'platform=macOS' build test
+    exit_code: 0
+    duration_seconds: 2.589
+    status: passed
+    output_tail: "AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks/XCTest.framework
+      /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework
+      (in target 'AIVM' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git
+      -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude
+      \\*.tbd -resolve-src-symlinks /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks\n\nCopy
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks/XCTestCore.framework
+      /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework
+      (in target 'AIVM' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git
+      -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude
+      \\*.tbd -resolve-src-symlinks /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks\n\nCopy
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks/XCUnit.framework
+      /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework
+      (in target 'AIVM' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git
+      -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude
+      \\*.tbd -resolve-src-symlinks /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUnit.framework
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks\n\nCopy
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks/XCUIAutomation.framework
+      /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUIAutomation.framework
+      (in target 'AIVM' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git
+      -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude
+      \\*.tbd -resolve-src-symlinks /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCUIAutomation.framework
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks\n\nCopy
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks/XCTestSupport.framework
+      /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework
+      (in target 'AIVM' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git
+      -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude
+      \\*.tbd -resolve-src-symlinks /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks\n\nCopy
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+      /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib
+      (in target 'AIVM' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git
+      -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude
+      \\*.tbd -resolve-src-symlinks /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks\n\nCopy
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks/libXCTestBundleInject.dylib
+      /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestBundleInject.dylib
+      (in target 'AIVM' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git
+      -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude
+      \\*.tbd -resolve-src-symlinks /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestBundleInject.dylib
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks\n\nCopy
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks/XCTAutomationSupport.framework
+      /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework
+      (in target 'AIVM' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git
+      -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude
+      \\*.tbd -resolve-src-symlinks /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Frameworks\n\nProcessInfoPlistFile
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Info.plist
+      /Users/cyberserval/github/AIVM/AIVM/Info.plist (in target 'AIVM' from project
+      'AIVM')\n    cd /Users/cyberserval/github/AIVM\n    builtin-infoPlistUtility
+      /Users/cyberserval/github/AIVM/AIVM/Info.plist -producttype com.apple.product-type.application
+      -genpkginfo /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PkgInfo
+      -expandbuildsettings -platform macosx -o /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/Info.plist\n\nCopySwiftLibs
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest
+      (in target 'AIVMTests' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/MacOS/AIVMTests
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/Frameworks
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/PlugIns
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/Library/SystemExtensions
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/Extensions
+      --platform macosx --toolchain /Applications/Xcode15.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain
+      --destination /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/Frameworks
+      --strip-bitcode --scan-executable /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib
+      --strip-bitcode-tool /Applications/Xcode15.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip
+      --emit-dependency-info /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Intermediates.noindex/AIVM.build/Debug/AIVMTests.build/SwiftStdLibToolInputDependencies.dep
+      --filter-for-swift-os\nIgnoring --strip-bitcode because --sign was not passed\n\nCopySwiftLibs
+      /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVMUITests-Runner.app/Contents/PlugIns/AIVMUITests.xctest
+      (in target 'AIVMUITests' from project 'AIVM')\n    cd /Users/cyberserval/github/AIVM\n
+      \   builtin-swiftStdLibTool --copy --verbose --scan-executable /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVMUITests-Runner.app/Contents/PlugIns/AIVMUITests.xctest/Contents/MacOS/AIVMUITests
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVMUITests-Runner.app/Contents/PlugIns/AIVMUITests.xctest/Contents/Frameworks
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVMUITests-Runner.app/Contents/PlugIns/AIVMUITests.xctest/Contents/PlugIns
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVMUITests-Runner.app/Contents/PlugIns/AIVMUITests.xctest/Contents/Library/SystemExtensions
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVMUITests-Runner.app/Contents/PlugIns/AIVMUITests.xctest/Contents/Extensions
+      --platform macosx --toolchain /Applications/Xcode15.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain
+      --destination /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVMUITests-Runner.app/Contents/PlugIns/AIVMUITests.xctest/Contents/Frameworks
+      --strip-bitcode --scan-executable /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib
+      --strip-bitcode-tool /Applications/Xcode15.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip
+      --emit-dependency-info /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Intermediates.noindex/AIVM.build/Debug/AIVMUITests.build/SwiftStdLibToolInputDependencies.dep
+      --filter-for-swift-os\nIgnoring --strip-bitcode because --sign was not passed\n\n2026-05-01
+      20:40:33.423888+0800 AIVM[69348:7625065] ApplePersistenceIgnoreState: Existing
+      state will not be touched. New state will be written to /var/folders/k_/x_tlzg1j3670xs7tzb_nmlq40000gn/T/pro.nanzhi.AIVM.savedState\nTest
+      Suite 'All tests' started at 2026-05-01 20:40:33.651.\nTest Suite 'AIVMTests.xctest'
+      started at 2026-05-01 20:40:33.651.\nTest Suite 'LocalizationKeyTests' started
+      at 2026-05-01 20:40:33.651.\nTest Case '-[AIVMTests.LocalizationKeyTests testLocalizationKeysAreUnique]'
+      started.\nTest Case '-[AIVMTests.LocalizationKeyTests testLocalizationKeysAreUnique]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.LocalizationKeyTests testRequiredLocalesResolveEveryKey]'
+      started.\nTest Case '-[AIVMTests.LocalizationKeyTests testRequiredLocalesResolveEveryKey]'
+      passed (0.002 seconds).\nTest Suite 'LocalizationKeyTests' passed at 2026-05-01
+      20:40:33.654.\n\t Executed 2 tests, with 0 failures (0 unexpected) in 0.003
+      (0.003) seconds\nTest Suite 'AIVMTests.xctest' passed at 2026-05-01 20:40:33.654.\n\t
+      Executed 2 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds\nTest
+      Suite 'All tests' passed at 2026-05-01 20:40:33.655.\n\t Executed 2 tests, with
+      0 failures (0 unexpected) in 0.003 (0.005) seconds\n2026-05-01 20:40:33.924
+      xcodebuild[69336:7624977] [MT] IDETestOperationsObserverDebug: 0.839 elapsed
+      -- Testing started completed.\n2026-05-01 20:40:33.924 xcodebuild[69336:7624977]
+      [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start\n2026-05-01
+      20:40:33.924 xcodebuild[69336:7624977] [MT] IDETestOperationsObserverDebug:
+      0.839 sec, +0.839 sec -- end\n\nTest session results, code coverage, and logs:\n\t/Users/cyberserval/github/AIVM/DerivedData/AIVM/Logs/Test/Run-AIVM-2026.05.01_20-40-32-+0800.xcresult\n\n**
+      TEST SUCCEEDED **\n\nTesting started"
+    required: true
+  - id: ui-smoke
+    command: xcodebuild -scheme AIVM -destination 'platform=macOS' -only-testing:AIVMUITests
+      test
+    exit_code: 70
+    duration_seconds: 1.694
+    status: failed
+    output_tail: |-
+      Command line invocation:
+          /Applications/Xcode15.4.app/Contents/Developer/usr/bin/xcodebuild -scheme AIVM -destination platform=macOS "-only-testing:AIVMUITests" test
+
+      User defaults from command line:
+          IDEPackageSupportUseBuiltinSCM = YES
+
+      --- xcodebuild: WARNING: Using the first of multiple matching destinations:
+      { platform:macOS, arch:arm64, id:00006000-000604A00A23401E, name:My Mac }
+      { platform:macOS, arch:x86_64, id:00006000-000604A00A23401E, name:My Mac }
+      2026-05-01 20:40:34.694 xcodebuild[69412:7625555] Writing error result bundle to /var/folders/k_/x_tlzg1j3670xs7tzb_nmlq40000gn/T/ResultBundle_2026-01-05_20-40-0034.xcresult
+      Prepare packages
+
+      xcodebuild: error: Failed to build project AIVM with scheme AIVM.: Tests in the target “AIVMUITests” can’t be run because “AIVMUITests” isn’t a member of the specified test plan or scheme.
+    required: false
+updated_at: '2026-05-01T12:40:35Z'
+finalized_at: 

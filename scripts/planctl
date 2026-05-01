@@ -1,0 +1,2313 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'json'
+require 'optparse'
+require 'open3'
+require 'pathname'
+require 'time'
+require 'yaml'
+
+class PlanCtl
+  GIT_OPT_OUT_ENV = 'PHASE_CONTRACT_ALLOW_NON_GIT'
+  SKIP_PUSH_ENV = 'PHASE_CONTRACT_SKIP_PUSH'
+  SKIP_COMMIT_ENV = 'PHASE_CONTRACT_SKIP_COMMIT'
+  ENFORCE_PATHS_ENV = 'PHASE_CONTRACT_ENFORCE_PATHS'
+  GIT_GUARD_EXIT_CODE = 3
+  ALWAYS_ALLOWED_PATHS = %w[plan/state.yaml plan/handoff.md .gitignore].freeze
+  STATE_SCHEMA_VERSION = 1
+  PLACEHOLDER_SENTINELS = %w[PHASE_CONTRACT_PLACEHOLDER PHASE-CONTRACT-PLACEHOLDER].freeze
+  PLACEHOLDER_HEADER_LINE_LIMIT = 40
+  PLACEHOLDER_HINT_PATTERNS = [
+    /当前.*占位合同/,
+    /占位合同.*禁止实施/,
+    /禁止开始实现/,
+    /升级(?:成|为)?正式合同/,
+    /placeholder contract/i,
+    /do not implement/i,
+    /upgrade .* formal contract/i
+  ].freeze
+  CONTRACT_MARKERS = %w[
+    PHASE_CONTRACT:FACT_AUDIT
+    PHASE_CONTRACT:PRODUCTION_WIRING
+    PHASE_CONTRACT:RUNTIME_EVIDENCE
+    PHASE_CONTRACT:FAILURE_MODES
+  ].freeze
+  SUBJECTIVE_LANGUAGE_PATTERNS = [
+    /良好/,
+    /合理/,
+    /基本完成/,
+    /可接受/,
+    /看起来/,
+    /good enough/i,
+    /reasonable/i,
+    /\bacceptable\b/i,
+    /looks\s+(good|fine|ok|okay)/i
+  ].freeze
+  CHECK_OUTPUT_LINE_LIMIT = 80
+  CHECK_OUTPUT_CHAR_LIMIT = 12_000
+  CHECK_TIMEOUT_EXIT_CODE = 124
+
+  def initialize(repo_root)
+    @repo_root = Pathname.new(repo_root)
+    @manifest_path = @repo_root.join('plan', 'manifest.yaml')
+    @manifest = load_yaml(@manifest_path)
+  end
+
+  def resolve(phase_id, format:, strict:)
+    ensure_git_repo!
+    result = build_resolve_result(fetch_phase(phase_id), load_state)
+
+    render_resolve(result, format)
+    exit(2) if strict && !result['ready']
+  end
+
+  def next_phase(format:, strict:)
+    ensure_git_repo!
+    state = load_state
+    phase = first_remaining_phase(Array(state['completed_phases']))
+
+    unless phase
+      render_no_remaining_phases(format)
+      return
+    end
+
+    result = build_resolve_result(phase, state)
+    render_resolve(result, format)
+    exit(2) if strict && !result['ready']
+  end
+
+  def status(format:)
+    warn_if_not_git_repo
+    result = build_status_result(load_state)
+
+    case format
+    when 'json'
+      puts JSON.pretty_generate(result)
+    else
+      puts 'Phase-Contract plan state'
+      puts "State file: #{result['state_file']}"
+      puts "Handoff file: #{result['handoff_file']}"
+      puts
+      puts "Completed phases: #{result['completed_phases'].empty? ? 'none' : result['completed_phases'].join(', ')}"
+      puts
+      if result['next_phase']
+        puts "Next phase: #{result['next_phase']['phase_id']} #{result['next_phase']['title']}"
+        unless Array(result['next_phase']['placeholder_contract_files']).empty?
+          puts "Next phase status: placeholder contracts need upgrade first (#{result['next_phase']['placeholder_contract_files'].join(', ')})"
+        end
+      else
+        puts 'Next phase: none'
+      end
+      puts
+      puts 'Available phases:'
+      if result['available_phases'].empty?
+        puts '- none'
+      else
+        result['available_phases'].each do |phase|
+          puts "- #{phase['phase_id']}: #{phase['title']}"
+        end
+      end
+      puts
+      puts 'Blocked phases:'
+      if result['blocked_phases'].empty?
+        puts '- none'
+      else
+        result['blocked_phases'].each do |phase|
+          reasons = []
+          reasons << "waiting for #{phase['missing_dependencies'].join(', ')}" unless phase['missing_dependencies'].empty?
+          unless Array(phase['placeholder_contract_files']).empty?
+            reasons << "placeholder contracts: #{phase['placeholder_contract_files'].join(', ')}"
+          end
+          puts "- #{phase['phase_id']}: #{reasons.join('; ')}"
+        end
+      end
+      puts
+      puts 'Remaining queue:'
+      if result['remaining_queue'].empty?
+        puts '- none'
+      else
+        result['remaining_queue'].each do |phase|
+          detail_parts = [phase['status']]
+          detail_parts << "waiting for #{phase['missing_dependencies'].join(', ')}" unless phase['missing_dependencies'].empty?
+          unless Array(phase['placeholder_contract_files']).empty?
+            detail_parts << "placeholder contracts: #{phase['placeholder_contract_files'].join(', ')}"
+          end
+          detail = detail_parts.join(' | ')
+          puts "- #{phase['phase_id']}: #{phase['title']} [#{detail}]"
+        end
+      end
+    end
+  end
+
+  def complete(phase_id, summary:, next_focus:, continue_run: false)
+    ensure_git_repo!
+    if blank?(summary)
+      warn "Cannot complete #{phase_id}: --summary is required and must be non-empty."
+      warn "Summaries become the commit subject and the handoff ledger; a blank summary leaves the next session blind."
+      exit 2
+    end
+    if blank?(next_focus)
+      warn "Cannot complete #{phase_id}: --next-focus is required and must be non-empty."
+      warn "Next-focus seeds the handoff and the next phase's resume prompt; an empty value wastes the primary resumption hint."
+      exit 2
+    end
+    if summary.lines.first.to_s.strip.length > 120
+      warn "[planctl] warning: summary first line exceeds 120 chars; commit subject will be long. Consider tightening."
+    end
+    phase = fetch_phase(phase_id)
+    state = load_state
+    completed = Array(state['completed_phases'])
+    missing_dependencies = Array(phase['depends_on']) - completed
+
+    unless missing_dependencies.empty?
+      warn "Cannot complete #{phase_id}. Missing dependencies: #{missing_dependencies.join(', ')}"
+      exit 2
+    end
+
+    if completed.include?(phase_id)
+      puts "Phase already completed: #{phase_id}"
+      return
+    end
+
+    contract_lint = run_contract_lint_check(phase)
+    unless contract_lint['status'] == 'passed'
+      warn "[planctl] contract lint failed for #{phase_id}."
+      warn contract_lint['output_tail'] unless blank?(contract_lint['output_tail'])
+      exit 2
+    end
+
+    required_results = run_declared_checks(phase, kind: 'required')
+    failed_required = required_results.reject { |result| result['status'] == 'passed' }
+    unless failed_required.empty?
+      failed_required.each { |result| warn format_check_failure(result, required: true) }
+      exit 2
+    end
+
+    # Pre-flight allowed_paths enforcement. Runs BEFORE any state write so a
+    # strict violation aborts cleanly without leaving the ledger ahead of
+    # the git history. Works best-effort when git is disabled — enforcement
+    # simply no-ops because we can't diff.
+    unless precheck_allowed_paths!(phase)
+      exit 2
+    end
+
+    optional_results = run_declared_checks(phase, kind: 'optional')
+    optional_results.reject { |result| result['status'] == 'passed' }.each do |result|
+      warn format_check_failure(result, required: false)
+    end
+
+    completed << phase_id
+    ordered = manifest_phases.map { |entry| entry['id'] }.select { |id| completed.include?(id) }
+    completion_log = Array(state['completion_log'])
+    timestamp = Time.now.utc.iso8601
+    completion_entry = {
+      'phase_id' => phase_id,
+      'completed_at' => timestamp
+    }
+    completion_entry['summary'] = summary unless blank?(summary)
+    completion_entry['next_focus'] = next_focus unless blank?(next_focus)
+    completion_entry['checks'] = [contract_lint, *required_results, *optional_results] unless [contract_lint, *required_results, *optional_results].empty?
+    completion_log << completion_entry
+
+    new_state = state.merge(
+      'version' => state['version'] || STATE_SCHEMA_VERSION,
+      'completed_phases' => ordered,
+      'completion_log' => completion_log,
+      'updated_at' => timestamp
+    )
+
+    write_state(new_state)
+    write_handoff_file(new_state)
+    puts "Marked complete: #{phase_id}"
+    puts "Updated state file: #{state_file_relative}"
+    puts "Updated handoff file: #{handoff_file_relative}"
+
+    commit_and_push_milestone!(phase_id, phase['title'], summary, next_focus)
+
+    # Hint the agent toward the next Golden-Loop step so a fresh session
+    # does not have to re-derive it from the manifest.
+    next_phase = first_remaining_phase(ordered)
+    if next_phase
+      puts "Next phase: #{next_phase['id']} (#{next_phase['title']}). Run: ruby scripts/planctl advance --strict"
+    else
+      puts 'All phases are completed. No remaining work.'
+      puts 'Final step: run `ruby scripts/planctl finalize` to print the final execution dashboard and recommended human next steps.'
+    end
+
+    if continue_run || autonomous_continuation?
+      puts
+      advance(format: 'prompt', strict: true)
+    end
+  end
+
+  # Revert a previously completed phase:
+  #   1. Locate its milestone commit via `git log --grep "Phase-Id: <id>"`.
+  #   2. Either `git revert` (default, safe) or `git reset --hard` that commit.
+  #   3. Remove the phase from completed_phases and append a reverted_at
+  #      entry to completion_log so the ledger reflects reality.
+  #   4. Rewrite state.yaml + handoff.md, then push the new history.
+  # The phase itself is NOT marked "to redo" — if you want to redo it, run
+  # `planctl advance --strict` afterwards; the dependency graph will put it
+  # back on the queue.
+  def revert(phase_id, mode:, summary:)
+    ensure_git_repo!
+    phase = fetch_phase(phase_id)
+    state = load_state
+    completed = Array(state['completed_phases'])
+
+    unless completed.include?(phase_id)
+      warn "Cannot revert #{phase_id}: it is not in completed_phases."
+      exit 2
+    end
+
+    dependents = manifest_phases.select do |candidate|
+      Array(candidate['depends_on']).include?(phase_id) && completed.include?(candidate['id'])
+    end
+    unless dependents.empty?
+      warn "Cannot revert #{phase_id}: the following completed phases depend on it — #{dependents.map { |d| d['id'] }.join(', ')}."
+      warn '[planctl] Revert the dependents first (in reverse order), then revert this phase.'
+      exit 2
+    end
+
+    unless %w[revert reset].include?(mode)
+      warn "Unknown --mode #{mode.inspect}; use 'revert' or 'reset'."
+      exit 1
+    end
+
+    commit_sha = find_milestone_commit(phase_id)
+    if commit_sha.nil? || commit_sha.empty?
+      warn "[planctl] No milestone commit found for #{phase_id} (searched git log for `Phase-Id: #{phase_id}` trailer)."
+      warn '[planctl] state.yaml will still be rolled back, but no git history change is performed. You must reconcile manually.'
+    else
+      case mode
+      when 'revert'
+        unless run_git('revert', '--no-edit', commit_sha)
+          warn "[planctl] git revert #{commit_sha} failed; resolve conflicts or abort, then retry."
+          exit 2
+        end
+        puts "[planctl] Reverted milestone commit #{commit_sha[0, 10]} for #{phase_id}."
+      when 'reset'
+        unless run_git('reset', '--hard', "#{commit_sha}^")
+          warn "[planctl] git reset --hard #{commit_sha}^ failed."
+          exit 2
+        end
+        puts "[planctl] Hard-reset past milestone commit #{commit_sha[0, 10]} for #{phase_id}. History rewritten."
+      end
+    end
+
+    timestamp = Time.now.utc.iso8601
+    new_completed = completed.reject { |id| id == phase_id }
+    completion_log = Array(state['completion_log'])
+    revert_entry = {
+      'phase_id' => phase_id,
+      'reverted_at' => timestamp,
+      'mode' => mode
+    }
+    revert_entry['summary'] = summary unless blank?(summary)
+    revert_entry['commit'] = commit_sha if commit_sha && !commit_sha.empty?
+    completion_log << revert_entry
+
+    new_state = state.merge(
+      'version' => state['version'] || STATE_SCHEMA_VERSION,
+      'completed_phases' => new_completed,
+      'completion_log' => completion_log,
+      'updated_at' => timestamp
+    )
+
+    write_state(new_state)
+    write_handoff_file(new_state)
+    puts "Marked reverted: #{phase_id}"
+    puts "Updated state file: #{state_file_relative}"
+    puts "Updated handoff file: #{handoff_file_relative}"
+
+    commit_and_push_revert!(phase_id, phase['title'], mode, commit_sha, summary)
+  end
+
+  def find_milestone_commit(phase_id)
+    out = capture_git('log', '--format=%H', "--grep=^Phase-Id: #{phase_id}$", '-E', '--max-count=1')
+    out.strip.split("\n").first
+  end
+
+  def commit_and_push_revert!(phase_id, title, mode, commit_sha, summary)
+    return if git_opt_out?
+    return unless git_work_tree?
+    return if env_truthy?(SKIP_COMMIT_ENV)
+
+    unless run_git('add', '-A')
+      warn '[planctl] git add -A failed; revert ledger not committed.'
+      return
+    end
+
+    if run_git('diff', '--cached', '--quiet')
+      puts "[planctl] Nothing to commit after revert (#{phase_id})."
+    else
+      subject_base = title && !title.strip.empty? ? title.strip : phase_id
+      subject = "chore(plan): revert #{phase_id} — #{subject_base}"
+      subject = subject[0, 100] if subject.length > 100
+      body = summary && !summary.strip.empty? ? summary.strip : 'Phase rolled back via planctl revert.'
+      lines = [subject, '', body, '', "Phase-Id: #{phase_id}", "Revert-Mode: #{mode}"]
+      lines << "Reverted-Commit: #{commit_sha}" if commit_sha && !commit_sha.empty?
+      lines << 'Automated-By: scripts/planctl revert'
+      message = lines.join("\n") + "\n"
+      unless run_git_with_stdin(message, 'commit', '-F', '-')
+        warn "[planctl] git commit failed after revert of #{phase_id}; state is rolled back but no ledger commit was recorded."
+        return
+      end
+      puts "[planctl] Committed revert ledger: #{phase_id}"
+    end
+
+    return if env_truthy?(SKIP_PUSH_ENV)
+
+    if mode == 'reset'
+      warn '[planctl] --mode reset rewrote history; skipping automatic push.'
+      warn '[planctl] If this branch has no remote collaborators, push manually with: git push --force-with-lease'
+      return
+    end
+
+    push_milestone!(phase_id)
+  end
+
+  def handoff(format:, write:)
+    ensure_git_repo!
+    state = load_state(create_if_missing: write)
+    snapshot = build_handoff_snapshot(state)
+
+    write_handoff_file(state, snapshot) if write
+    render_handoff(snapshot, format)
+    puts "Updated handoff file: #{handoff_file_relative}" if write && format != 'json'
+  end
+
+  # Cold-start macro: prints everything an AI agent needs to resume work
+  # after a compression / fresh session. Combines manifest overview,
+  # handoff snapshot, and the autonomous `advance` result in one shot so
+  # the agent does not have to orchestrate multiple calls.
+  def resume(strict:)
+    warn_if_not_git_repo
+    state = load_state
+    snapshot = build_handoff_snapshot(state)
+
+    puts '=== Phase-Contract Resume ==='
+    puts "Project: #{@manifest['project'] || '(unnamed)'}"
+    puts "Repository: #{@repo_root}"
+    puts "State file: #{snapshot['state_file']}"
+    puts "Handoff file: #{snapshot['handoff_file']}"
+    puts "Updated at: #{snapshot['updated_at'] || 'not recorded yet'}"
+    puts
+    puts "Read these files first (compression-safe resume order):"
+    snapshot['resume_read_order'].each_with_index { |p, i| puts "  #{i + 1}. #{p}" }
+    puts
+    puts "--- Handoff snapshot ---"
+    render_handoff(snapshot, 'prompt')
+    puts
+    puts '--- Next action ---'
+    result = build_advance_result(state)
+    render_advance(result, 'prompt')
+    exit(2) if strict && result['action'] == 'stop'
+  end
+
+  # Autonomous continuation state machine. Unlike `next --strict`, placeholder
+  # contracts are not treated as a blocker here: they become an internal
+  # Golden-Loop action (`promote_placeholder`) so agents keep moving without
+  # asking the user for phase-boundary confirmation.
+  def advance(format:, strict:)
+    ensure_git_repo!
+    result = build_advance_result(load_state)
+    render_advance(result, format)
+    exit(2) if strict && result['action'] == 'stop'
+  end
+
+  # Repository integrity checker. Returns exit 0 when healthy, 2 when
+  # critical problems found, and prints a structured report either way.
+  # Checks:
+  #   * Ruby runtime version (>= 2.7)
+  #   * git work tree + optional remote
+  #   * manifest phases -> plan_file / execution_file exist
+  #   * state.yaml completed_phases -> each id exists in manifest
+  #   * state.yaml <-> handoff.md coherence (both exist or both missing)
+  #   * Three agent instruction files identical SHA256:
+  #       .github/copilot-instructions.md, CLAUDE.md, AGENTS.md
+  def doctor
+    require 'digest'
+    problems = []
+    warnings = []
+
+    puts '=== Phase-Contract Doctor ==='
+    puts "Ruby: #{RUBY_VERSION}"
+    ruby_major, ruby_minor = RUBY_VERSION.split('.').first(2).map(&:to_i)
+    if ruby_major < 2 || (ruby_major == 2 && ruby_minor < 6)
+      warnings << "Ruby #{RUBY_VERSION} is older than 2.6; upgrade if you see YAML.safe_load errors."
+    end
+
+    if git_work_tree?
+      puts 'Git work tree: ok'
+      remotes = capture_git('remote').split("\n").reject(&:empty?)
+      if remotes.empty?
+        warnings << 'No git remote configured; `complete` will commit locally, skip push, and continue.'
+      else
+        puts "Git remotes: #{remotes.join(', ')}"
+      end
+    else
+      problems << "#{@repo_root} is not a git work tree."
+    end
+
+    manifest_phases.each do |phase|
+      %w[plan_file execution_file].each do |key|
+        path = phase[key]
+        if path.nil? || path.empty?
+          problems << "manifest phase #{phase['id']} missing #{key}."
+        elsif !@repo_root.join(path).file?
+          problems << "manifest phase #{phase['id']}: #{key} #{path} does not exist."
+        end
+      end
+    end
+
+    state_path = state_file_path
+    handoff_path = handoff_file_path
+    state = nil
+    if state_path.file?
+      state = load_state
+      known_ids = manifest_phases.map { |p| p['id'] }
+      Array(state['completed_phases']).each do |id|
+        problems << "state.yaml lists completed phase #{id}, which is not in manifest." unless known_ids.include?(id)
+      end
+      warnings << 'state.yaml exists but plan/handoff.md is missing; run `planctl handoff --write`.' unless handoff_path.file?
+
+      next_phase = first_remaining_phase(Array(state['completed_phases']))
+      if next_phase
+        placeholders = placeholder_contract_files_for(next_phase)
+        unless placeholders.empty?
+          problems << "current phase #{next_phase['id']} still uses placeholder contract file(s): #{placeholders.join(', ')}. Upgrade both contracts before implementation."
+        end
+      end
+    else
+      warnings << 'state.yaml not created yet; run `planctl advance --strict` or complete a phase.' if handoff_path.file?
+    end
+
+    current_phase = current_phase_for_lint(state)
+    if current_phase
+      puts "Contract lint target: #{current_phase['id']}"
+      lint = lint_phase_contract(current_phase, targeted: true, current_phase_id: current_phase['id'])
+      lint['warnings'].each { |warning| warnings << "contract lint: #{warning}" }
+      lint['problems'].each { |problem| problems << "contract lint: #{problem}" }
+    end
+
+    instruction_files = %w[.github/copilot-instructions.md CLAUDE.md AGENTS.md]
+    existing = instruction_files.select { |p| @repo_root.join(p).file? }
+    if existing.empty?
+      warnings << 'No agent instruction files found (.github/copilot-instructions.md, CLAUDE.md, AGENTS.md).'
+    elsif existing.length < instruction_files.length
+      missing = instruction_files - existing
+      warnings << "Agent instruction file(s) missing: #{missing.join(', ')}."
+    else
+      hashes = existing.map { |p| [p, Digest::SHA256.hexdigest(@repo_root.join(p).read)] }
+      unique = hashes.map(&:last).uniq
+      if unique.length == 1
+        puts "Agent instructions in sync: sha256=#{unique.first[0, 12]}"
+      else
+        problems << "Agent instruction files diverge (copilot/CLAUDE/AGENTS are not byte-identical): #{hashes.map { |p, h| "#{p}=#{h[0, 8]}" }.join(', ')}."
+      end
+    end
+
+    puts
+    if warnings.any?
+      puts 'Warnings:'
+      warnings.each { |w| puts "- #{w}" }
+      puts
+    end
+    if problems.empty?
+      puts 'All checks passed.'
+    else
+      puts 'Problems:'
+      problems.each { |p| puts "- #{p}" }
+      exit 2
+    end
+  end
+
+  def lint_contracts(phase_id: nil, all: false)
+    state = state_file_path.file? ? load_state : default_state
+    current_phase = current_phase_for_lint(state)
+    targets = if all
+                manifest_phases
+              elsif phase_id
+                [fetch_phase(phase_id)]
+              elsif current_phase
+                [current_phase]
+              else
+                []
+              end
+
+    results = targets.map do |phase|
+      lint_phase_contract(
+        phase,
+        targeted: !all || phase['id'] == current_phase&.dig('id'),
+        current_phase_id: current_phase&.dig('id')
+      )
+    end
+
+    puts '=== Phase-Contract Contract Lint ==='
+    if results.empty?
+      puts 'No manifest phases found.'
+      return
+    end
+
+    results.each do |result|
+      puts "Phase: #{result['phase_id']} #{result['title']}"
+      if result['skipped_placeholder']
+        puts '- skipped formal-contract checks for future placeholder phase'
+      end
+      result['warnings'].each { |warning| puts "- warning: #{warning}" }
+      result['problems'].each { |problem| puts "- problem: #{problem}" }
+      puts '- ok: contract passes lint' if result['warnings'].empty? && result['problems'].empty?
+      puts
+    end
+
+    exit 2 if results.any? { |result| result['problems'].any? }
+  end
+
+  # Final wrap-up dashboard. Runs only when every manifest phase is in
+  # state.yaml's completed_phases and each phase has a successful
+  # completion_log entry with required checks passing. Aggregates manifest,
+  # state ledger, handoff, git history (milestone commits), working-tree
+  # health, and doctor-style integrity checks into a single review payload,
+  # then prints a tailored "human next steps" checklist. The AI is expected
+  # to render the dashboard verbatim to the user and add deeper review
+  # commentary on top — finalize itself never declares the project closed;
+  # that decision is the human's.
+  def finalize(format:)
+    ensure_git_repo!
+    state = load_state
+    validate_finalize_readiness!(state)
+
+    state = write_finalize_ledger_if_needed!(state)
+    dashboard = build_finalize_dashboard(state)
+
+    case format
+    when 'json'
+      puts JSON.pretty_generate(dashboard)
+    else
+      render_finalize_dashboard(dashboard)
+    end
+  end
+
+  private
+
+  def ensure_git_repo!
+    return if git_opt_out?
+    return if git_work_tree?
+
+    warn git_guard_message
+    exit GIT_GUARD_EXIT_CODE
+  end
+
+  def warn_if_not_git_repo
+    return if git_opt_out?
+    return if git_work_tree?
+
+    warn '[planctl] warning: current directory is not a git work tree.'
+    warn "[planctl] warning: `advance` / `next` / `resolve` / `complete` / `handoff` will refuse to run (exit #{GIT_GUARD_EXIT_CODE}) until a git baseline exists."
+    warn "[planctl] warning: see `plan/workflow.md` for the `git init` instructions or set #{GIT_OPT_OUT_ENV}=1 to opt out explicitly."
+  end
+
+  def git_opt_out?
+    value = ENV[GIT_OPT_OUT_ENV]
+    return false if value.nil? || value.empty?
+
+    %w[1 true yes on].include?(value.downcase)
+  end
+
+  def git_work_tree?
+    output = IO.popen(['git', '-C', @repo_root.to_s, 'rev-parse', '--is-inside-work-tree'], err: [:child, :out], &:read)
+    $?.success? && output.strip == 'true'
+  rescue Errno::ENOENT
+    # git not installed — fall back to checking for a .git entry so the tool
+    # remains usable on minimal environments, but warn the operator.
+    warn '[planctl] warning: `git` executable not found; falling back to .git presence check.'
+    @repo_root.join('.git').exist?
+  end
+
+  def git_guard_message
+    lines = []
+    lines << "[planctl] error: #{@repo_root} is not a git work tree."
+    lines << '[planctl] Phase-Contract Workflow relies on git for phase-level whitelist diffing, rollback, and handoff verification.'
+    lines << '[planctl] Without git, `complete` cannot be audited and any write to plan/state.yaml would be unverifiable.'
+    lines << ''
+    lines << 'Fix it with:'
+    lines << "  cd #{@repo_root}"
+    lines << '  git init'
+    lines << '  git add -A'
+    lines << "  git commit -m 'baseline'"
+    lines << ''
+    lines << "If this project intentionally does not use git, set #{GIT_OPT_OUT_ENV}=1 and record the deviation (with a rollback/audit plan) in plan/common.md."
+    lines.join("\n")
+  end
+
+  # Automatically commit + push the current phase's work as a milestone.
+  # Designed to run unattended:
+  #   * `git add -A` stages every change under the work tree (phase output +
+  #     state.yaml + handoff.md). If the AI updated `.gitignore` while
+  #     reasoning about transient artifacts, that change is staged too.
+  #   * When nothing is staged we skip commit silently.
+  #   * Commit message follows a Conventional-Commits-ish layout with
+  #     idiomatic English wording, derived from phase id, title, summary and
+  #     next-focus. Nothing is translated - user-provided text is preserved
+  #     inside the body.
+  #   * `git push` targets the currently tracked upstream. If no upstream is
+  #     configured we push to the default remote / current branch and fall
+  #     back to `git push -u <remote> HEAD` so the first run also succeeds.
+  #   * Hard failures (commit / push) are surfaced as warnings. State is
+  #     already written, so the phase is still considered complete; the
+  #     operator just needs to resolve the git issue manually.
+  # Escape hatches (unattended-friendly):
+  #   PHASE_CONTRACT_SKIP_COMMIT=1  -> skip commit and push entirely
+  #   PHASE_CONTRACT_SKIP_PUSH=1    -> commit locally, skip push
+  def commit_and_push_milestone!(phase_id, title, summary, next_focus)
+    return if git_opt_out?
+    return unless git_work_tree?
+
+    if env_truthy?(SKIP_COMMIT_ENV)
+      puts "[planctl] #{SKIP_COMMIT_ENV} is set; skipping auto-commit and auto-push."
+      return
+    end
+
+    unless run_git('add', '-A')
+      warn '[planctl] git add -A failed; milestone not committed. Resolve and commit manually.'
+      return
+    end
+
+    # `git diff --cached --quiet` exits 0 when nothing is staged.
+    if run_git('diff', '--cached', '--quiet')
+      puts "[planctl] Nothing to commit for #{phase_id}; working tree already clean."
+      return
+    end
+
+    message = build_commit_message(phase_id, title, summary, next_focus)
+    unless run_git_with_stdin(message, 'commit', '-F', '-')
+      warn "[planctl] git commit failed for #{phase_id}; state is marked complete but no milestone commit was recorded."
+      warn '[planctl] Resolve the commit manually (hooks, signing, identity) and commit the pending changes.'
+      return
+    end
+    puts "[planctl] Committed milestone: #{phase_id}"
+
+    if env_truthy?(SKIP_PUSH_ENV)
+      puts "[planctl] #{SKIP_PUSH_ENV} is set; skipping push. Milestone is stored locally only."
+      return
+    end
+
+    push_milestone!(phase_id)
+  end
+
+  def push_milestone!(phase_id)
+    remotes = capture_git('remote').split("\n").reject(&:empty?)
+    if remotes.empty?
+      warn '[planctl] No git remote configured; milestone committed locally only, skipping push and continuing.'
+      warn "[planctl] Add a remote and run `git push` manually, or set #{SKIP_PUSH_ENV}=1 to silence this warning."
+      return
+    end
+
+    # Prefer pushing to the tracked upstream (fast path for subsequent runs).
+    return if run_git('push')
+
+    # First push of a branch typically has no upstream. Fall back to an
+    # explicit `push -u <remote> HEAD` against the first available remote
+    # (usually `origin`) so the unattended flow still succeeds end to end.
+    target_remote = remotes.include?('origin') ? 'origin' : remotes.first
+    if run_git('push', '-u', target_remote, 'HEAD')
+      puts "[planctl] Pushed milestone to #{target_remote} (set upstream)."
+      return
+    end
+
+    warn "[planctl] git push failed for #{phase_id}; milestone is committed locally only."
+    warn '[planctl] Resolve the push (auth, protected branch, diverged history) and push manually.'
+  end
+
+  def build_commit_message(phase_id, title, summary, next_focus)
+    subject_base = title && !title.strip.empty? ? title.strip : phase_id
+    subject = "chore(plan): complete #{phase_id} — #{subject_base}"
+    subject = subject[0, 100] if subject.length > 100
+
+    lines = [subject, '']
+    body = summary && !summary.strip.empty? ? summary.strip : 'Milestone recorded by planctl after phase completion.'
+    lines << body
+    lines << ''
+    lines << "Phase-Id: #{phase_id}"
+    lines << "Next-Focus: #{next_focus.strip}" if next_focus && !next_focus.strip.empty?
+    lines << 'Automated-By: scripts/planctl complete'
+    lines.join("\n") + "\n"
+  end
+
+  def write_finalize_ledger_if_needed!(state)
+    finalized_at = state['finalized_at']
+    return state unless blank?(finalized_at.to_s)
+
+    timestamp = Time.now.utc.iso8601
+    new_state = state.merge(
+      'version' => state['version'] || STATE_SCHEMA_VERSION,
+      'finalized_at' => timestamp,
+      'updated_at' => timestamp
+    )
+
+    write_state(new_state)
+    write_handoff_file(new_state)
+    commit_and_push_finalization!(timestamp)
+    new_state
+  end
+
+  def commit_and_push_finalization!(finalized_at)
+    return if git_opt_out?
+    return unless git_work_tree?
+
+    if env_truthy?(SKIP_COMMIT_ENV)
+      puts "[planctl] #{SKIP_COMMIT_ENV} is set; skipping finalization commit and push."
+      return
+    end
+
+    unless run_git('add', '-A')
+      warn '[planctl] git add -A failed; finalization ledger not committed.'
+      return
+    end
+
+    if run_git('diff', '--cached', '--quiet')
+      puts '[planctl] Nothing to commit for finalization; ledger is already recorded in git.'
+      return
+    end
+
+    message = build_finalization_commit_message(finalized_at)
+    unless run_git_with_stdin(message, 'commit', '-F', '-')
+      warn "[planctl] git commit failed for finalization; #{state_file_relative} and #{handoff_file_relative} remain updated."
+      warn '[planctl] Resolve the commit manually (hooks, signing, identity) and commit the pending finalization ledger.'
+      return
+    end
+    puts '[planctl] Committed finalization ledger.'
+
+    if env_truthy?(SKIP_PUSH_ENV)
+      puts "[planctl] #{SKIP_PUSH_ENV} is set; skipping push. Finalization ledger is stored locally only."
+      return
+    end
+
+    push_finalization_ledger!
+  end
+
+  def build_finalization_commit_message(finalized_at)
+    project = @manifest['project']
+    project = @repo_root.basename.to_s if blank?(project.to_s)
+
+    lines = ["chore(plan): finalize #{project} execution", '']
+    lines << 'Record the finalization ledger after all manifest phases completed.'
+    lines << ''
+    lines << "Finalized-At: #{finalized_at}"
+    lines << 'Automated-By: scripts/planctl finalize'
+    lines.join("\n") + "\n"
+  end
+
+  def push_finalization_ledger!
+    remotes = capture_git('remote').split("\n").reject(&:empty?)
+    if remotes.empty?
+      warn '[planctl] No git remote configured; finalization ledger committed locally only, skipping push and continuing.'
+      warn "[planctl] Add a remote and run `git push` manually, or set #{SKIP_PUSH_ENV}=1 to silence this warning."
+      return
+    end
+
+    return if run_git('push')
+
+    target_remote = remotes.include?('origin') ? 'origin' : remotes.first
+    if run_git('push', '-u', target_remote, 'HEAD')
+      puts "[planctl] Pushed finalization ledger to #{target_remote} (set upstream)."
+      return
+    end
+
+    warn '[planctl] git push failed for finalization; finalization ledger is committed locally only.'
+    warn '[planctl] Resolve the push (auth, protected branch, diverged history) and push manually.'
+  end
+
+  # Pre-commit enforcement: stages every change via `git add -A` and
+  # compares the staged paths against the phase's allowed_paths globs.
+  # Returns true when safe to proceed, false when a hard violation should
+  # abort. Default mode is "warn" (prints offending paths but returns
+  # true). Set PHASE_CONTRACT_ENFORCE_PATHS=1 or
+  # manifest.execution_rule.enforce_allowed_paths: true to switch to
+  # abort-mode. No-op when git is disabled / not a work tree.
+  def precheck_allowed_paths!(phase)
+    return true if git_opt_out?
+    return true unless git_work_tree?
+
+    allowed = Array(phase['allowed_paths'])
+    return true if allowed.empty?
+
+    unless run_git('add', '-A')
+      warn '[planctl] git add -A failed during allowed_paths pre-check.'
+      return true # don't block on git failure; let commit step surface it
+    end
+
+    staged = capture_git('diff', '--cached', '--name-only').split("\n").reject(&:empty?)
+    return true if staged.empty?
+
+    whitelist = (allowed + ALWAYS_ALLOWED_PATHS).uniq
+    violations = staged.reject { |path| path_matches_any?(path, whitelist) }
+    return true if violations.empty?
+
+    enforce = env_truthy?(ENFORCE_PATHS_ENV) || @manifest.dig('execution_rule', 'enforce_allowed_paths')
+    header = "[planctl] phase #{phase['id']} staged files outside allowed_paths:"
+    if enforce
+      warn header
+      violations.each { |path| warn "  - #{path}" }
+      warn '[planctl] aborting before state write. Either add the path to allowed_paths or unstage the file; state.yaml is unchanged.'
+      false
+    else
+      warn header
+      violations.each { |path| warn "  - #{path} (warning only; enable enforcement via #{ENFORCE_PATHS_ENV}=1 or manifest.execution_rule.enforce_allowed_paths: true)" }
+      true
+    end
+  end
+
+  def run_contract_lint_check(phase)
+    started_at = monotonic_now
+    lint = lint_phase_contract(phase, targeted: true, current_phase_id: phase['id'])
+    output = contract_lint_output(lint)
+    {
+      'id' => 'contract-lint',
+      'command' => "ruby scripts/planctl lint-contracts --phase #{phase['id']}",
+      'exit_code' => lint['problems'].empty? ? 0 : 2,
+      'duration_seconds' => elapsed_since(started_at),
+      'status' => lint['problems'].empty? ? 'passed' : 'failed',
+      'output_tail' => summarize_check_output(output),
+      'required' => true
+    }
+  end
+
+  def run_declared_checks(phase, kind:)
+    definitions = declared_checks_for(phase, kind)
+    definitions.map do |definition|
+      run_declared_check(definition, required: kind == 'required')
+    end
+  end
+
+  def declared_checks_for(phase, kind)
+    Array(phase.dig('checks', kind))
+  end
+
+  def run_declared_check(definition, required:)
+    started_at = monotonic_now
+    id = definition['id'].to_s.strip
+    command = definition['command'].to_s.strip
+    timeout_seconds = normalize_timeout(definition['timeout_seconds'])
+
+    if id.empty? || command.empty?
+      return {
+        'id' => id.empty? ? '(missing-id)' : id,
+        'command' => command,
+        'exit_code' => 2,
+        'duration_seconds' => elapsed_since(started_at),
+        'status' => 'failed',
+        'output_tail' => summarize_check_output('check definition is missing id or command.'),
+        'required' => required
+      }
+    end
+
+    execution = run_shell_check(command, timeout_seconds: timeout_seconds)
+    {
+      'id' => id,
+      'command' => command,
+      'exit_code' => execution['exit_code'],
+      'duration_seconds' => elapsed_since(started_at),
+      'status' => execution['status'],
+      'output_tail' => summarize_check_output(execution['output']),
+      'required' => required
+    }
+  end
+
+  def run_shell_check(command, timeout_seconds:)
+    output = ''
+    process_status = nil
+    timed_out = false
+
+    Open3.popen2e('sh', '-lc', command, chdir: @repo_root.to_s, pgroup: true) do |stdin, stream, wait_thread|
+      stdin.close
+      reader = Thread.new { stream.read.to_s }
+
+      if timeout_seconds && timeout_seconds.positive?
+        unless wait_thread.join(timeout_seconds)
+          timed_out = true
+          terminate_process_group(wait_thread.pid, 'TERM')
+          unless wait_thread.join(1)
+            terminate_process_group(wait_thread.pid, 'KILL')
+            wait_thread.join
+          end
+        end
+      else
+        wait_thread.join
+      end
+
+      process_status = wait_thread.value
+      output = reader.value
+    end
+
+    if timed_out
+      return {
+        'status' => 'timeout',
+        'exit_code' => CHECK_TIMEOUT_EXIT_CODE,
+        'output' => [output, "[planctl] timeout after #{timeout_seconds}s"].reject(&:empty?).join("\n")
+      }
+    end
+
+    exit_code = process_status.exitstatus
+    exit_code = 1 if exit_code.nil? || exit_code.zero? && !process_status.success?
+    {
+      'status' => process_status.success? ? 'passed' : 'failed',
+      'exit_code' => exit_code,
+      'output' => output
+    }
+  rescue Errno::ENOENT => error
+    {
+      'status' => 'failed',
+      'exit_code' => 127,
+      'output' => error.message
+    }
+  end
+
+  def terminate_process_group(pid, signal)
+    Process.kill(signal, -pid)
+  rescue Errno::ESRCH, RangeError
+    Process.kill(signal, pid)
+  rescue Errno::ESRCH
+    nil
+  end
+
+  def format_check_failure(result, required:)
+    kind = required ? 'required' : 'optional'
+    header = "[planctl] #{kind} check #{result['id']} #{result['status']} (exit=#{result['exit_code']})."
+    details = []
+    details << "command: #{result['command']}" unless blank?(result['command'].to_s)
+    details << result['output_tail'] unless blank?(result['output_tail'].to_s)
+    ([header] + details).join("\n")
+  end
+
+  def current_phase_for_lint(state)
+    completed = Array(state && state['completed_phases'])
+    first_remaining_phase(completed) || manifest_phases.first
+  end
+
+  def lint_phase_contract(phase, targeted:, current_phase_id:)
+    placeholder_files = placeholder_contract_files_for(phase)
+    strict_formal = targeted || phase['id'] == current_phase_id || placeholder_files.empty?
+    problems = []
+    warnings = []
+
+    expected_context = unique_paths([common_context_path, phase['plan_file'], phase['execution_file']])
+    actual_context = normalized_context_for(phase)
+    if actual_context != expected_context
+      problems << "phase #{phase['id']} required_context must resolve to exactly #{expected_context.join(', ')}; got #{actual_context.join(', ')}."
+    end
+
+    if strict_formal && !placeholder_files.empty?
+      problems << "phase #{phase['id']} still uses placeholder contract file(s): #{placeholder_files.join(', ')}."
+    end
+
+    if strict_formal
+      if Array(phase['allowed_paths']).empty?
+        problems << "phase #{phase['id']} allowed_paths must not be empty."
+      end
+      if require_phase_checks? && declared_checks_for(phase, 'required').empty?
+        problems << "phase #{phase['id']} must declare at least one required check because execution_rule.require_phase_checks is true."
+      end
+      problems.concat(contract_file_lint_problems(phase['plan_file'], heading_type: 'phase'))
+      problems.concat(contract_file_lint_problems(phase['execution_file'], heading_type: 'execution'))
+    end
+
+    {
+      'phase_id' => phase['id'],
+      'title' => phase['title'],
+      'problems' => problems,
+      'warnings' => warnings,
+      'skipped_placeholder' => !strict_formal && !placeholder_files.empty?
+    }
+  end
+
+  def contract_file_lint_problems(relative_path, heading_type:)
+    problems = []
+    content = contract_file_content(relative_path)
+
+    CONTRACT_MARKERS.each do |marker|
+      problems << "#{relative_path} missing marker #{marker}." unless content.include?(marker)
+    end
+
+    section_titles = heading_type == 'phase' ? ['完成判定', 'Completion Criteria'] : ['交付检查', 'Delivery Checks']
+    lint_section = extract_heading_section(content, section_titles)
+    subjective_matches = SUBJECTIVE_LANGUAGE_PATTERNS.each_with_object([]) do |pattern, matches|
+      next unless lint_section.match?(pattern)
+
+      match = lint_section.match(pattern)
+      matches << match[0] if match
+    end
+    unless subjective_matches.empty?
+      problems << "#{relative_path} #{section_titles.first} contains subjective wording: #{subjective_matches.uniq.join(', ')}."
+    end
+
+    production_wiring = extract_heading_section(content, ['PHASE_CONTRACT:PRODUCTION_WIRING'])
+    if blank?(production_wiring)
+      problems << "#{relative_path} missing Production Wiring details after PHASE_CONTRACT:PRODUCTION_WIRING."
+    elsif !production_wiring.match?(/\bN\/A\b/i) && !table_has_data_rows?(production_wiring)
+      problems << "#{relative_path} Production Wiring must contain adoption rows or an explicit N/A reason."
+    end
+
+    problems
+  end
+
+  def contract_lint_output(result)
+    lines = []
+    lines << '=== Phase-Contract Contract Lint ==='
+    lines << "Phase: #{result['phase_id']} #{result['title']}"
+    result['warnings'].each { |warning| lines << "warning: #{warning}" }
+    if result['problems'].empty?
+      lines << 'ok: contract passes lint'
+    else
+      result['problems'].each { |problem| lines << "problem: #{problem}" }
+    end
+    lines.join("\n")
+  end
+
+  def extract_heading_section(content, titles)
+    lines = content.lines
+    buffer = []
+    collecting = false
+    heading_level = nil
+
+    lines.each do |line|
+      heading = line.match(/^(#+)\s*(.+?)\s*$/)
+      if heading
+        level = heading[1].length
+        title = heading[2].strip
+        if collecting && level <= heading_level
+          break
+        end
+        if titles.include?(title)
+          collecting = true
+          heading_level = level
+          next
+        end
+      end
+      buffer << line if collecting
+    end
+
+    buffer.join.strip
+  end
+
+  def table_has_data_rows?(content)
+    pipe_lines = content.lines.select { |line| line.include?('|') }
+    return false if pipe_lines.length < 3
+
+    pipe_lines.drop(2).any? do |line|
+      stripped = line.gsub(/[|\-:\s]/, '')
+      !stripped.empty?
+    end
+  end
+
+  def common_context_path
+    Array(@manifest.dig('execution_rule', 'required_context')).first ||
+      @manifest.dig('entrypoints', 'common') ||
+      'plan/common.md'
+  end
+
+  def require_phase_checks?
+    @manifest.dig('execution_rule', 'require_phase_checks') == true
+  end
+
+  def normalize_timeout(value)
+    return nil if value.nil?
+
+    timeout = value.to_i
+    timeout.positive? ? timeout : nil
+  end
+
+  def summarize_check_output(text)
+    lines = text.to_s.lines.last(CHECK_OUTPUT_LINE_LIMIT).join
+    tail = if lines.length > CHECK_OUTPUT_CHAR_LIMIT
+             lines[-CHECK_OUTPUT_CHAR_LIMIT, CHECK_OUTPUT_CHAR_LIMIT]
+           else
+             lines
+           end
+    tail.strip
+  end
+
+  def monotonic_now
+    Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  end
+
+  def elapsed_since(started_at)
+    (monotonic_now - started_at).round(3)
+  end
+
+  def contract_file_content(relative_path)
+    path = @repo_root.join(relative_path)
+    path.file? ? read_text_file(path) : ''
+  end
+
+  def path_matches_any?(path, globs)
+    globs.any? do |glob|
+      File.fnmatch(glob, path, File::FNM_PATHNAME | File::FNM_EXTGLOB) ||
+        (glob.end_with?('/') && path.start_with?(glob)) ||
+        File.fnmatch(File.join(glob, '**'), path, File::FNM_PATHNAME | File::FNM_EXTGLOB)
+    end
+  end
+
+  def run_git(*args)
+    system('git', '-C', @repo_root.to_s, *args)
+  end
+
+  def run_git_with_stdin(stdin_text, *args)
+    IO.popen(['git', '-C', @repo_root.to_s, *args], 'w') { |io| io.write(stdin_text) }
+    $?.success?
+  end
+
+  def capture_git(*args)
+    IO.popen(['git', '-C', @repo_root.to_s, *args], err: [:child, :out], &:read).to_s
+  rescue Errno::ENOENT
+    ''
+  end
+
+  # Like `capture_git`, but discards stderr. Intended for queries whose
+  # absence is a normal signal (e.g. `rev-parse @{u}` when no upstream is
+  # configured) so the dashboard does not surface raw git error text.
+  def capture_git_silent(*args)
+    IO.popen(['git', '-C', @repo_root.to_s, *args], err: File::NULL, &:read).to_s
+  rescue Errno::ENOENT
+    ''
+  end
+
+  def env_truthy?(name)
+    value = ENV[name]
+    return false if value.nil? || value.empty?
+
+    %w[1 true yes on].include?(value.downcase)
+  end
+
+  def build_resolve_result(phase, state)
+    completed = Array(state['completed_phases'])
+    dependencies = Array(phase['depends_on'])
+    missing_dependencies = dependencies - completed
+    required_context = normalized_context_for(phase)
+    missing_context_files = required_context.reject { |path| @repo_root.join(path).file? }
+    placeholder_contract_files = placeholder_contract_files_for(phase)
+
+    {
+      'phase_id' => phase['id'],
+      'title' => phase['title'],
+      'plan_file' => phase['plan_file'],
+      'execution_file' => phase['execution_file'],
+      'required_context' => required_context,
+      'depends_on' => dependencies,
+      'completed_dependencies' => dependencies & completed,
+      'missing_dependencies' => missing_dependencies,
+      'missing_context_files' => missing_context_files,
+      'placeholder_contract_files' => placeholder_contract_files,
+      'resolver' => @manifest.dig('execution_rule', 'resolver'),
+      'state_file' => state_file_relative,
+      'handoff_file' => handoff_file_relative,
+      'ready' => missing_dependencies.empty? && missing_context_files.empty? && placeholder_contract_files.empty?
+    }
+  end
+
+  def build_advance_result(state)
+    completed = Array(state['completed_phases'])
+    phase = first_remaining_phase(completed)
+    continuation = continuation_policy
+
+    unless phase
+      return {
+        'action' => 'finalize',
+        'stop_reason' => 'all_phases_completed',
+        'phase' => nil,
+        'required_context' => [],
+        'continuation' => continuation,
+        'finalize_command' => 'ruby scripts/planctl finalize',
+        'message' => 'All phases are completed. Run finalize, then stop for human release/archive decisions.'
+      }
+    end
+
+    resolve = build_resolve_result(phase, state)
+    blockers = []
+    blockers << 'dependency_missing' unless Array(resolve['missing_dependencies']).empty?
+    blockers << 'missing_context' unless Array(resolve['missing_context_files']).empty?
+
+    action = if blockers.any?
+               'stop'
+             elsif !Array(resolve['placeholder_contract_files']).empty?
+               'promote_placeholder'
+             else
+               'implement'
+             end
+
+    stop_reason = blockers.empty? ? 'none' : blockers.join(', ')
+
+    {
+      'action' => action,
+      'stop_reason' => stop_reason,
+      'phase' => {
+        'phase_id' => resolve['phase_id'],
+        'title' => resolve['title'],
+        'plan_file' => resolve['plan_file'],
+        'execution_file' => resolve['execution_file']
+      },
+      'required_context' => resolve['required_context'],
+      'missing_dependencies' => resolve['missing_dependencies'],
+      'missing_context_files' => resolve['missing_context_files'],
+      'placeholder_contract_files' => resolve['placeholder_contract_files'],
+      'continuation' => continuation,
+      'next_command' => 'ruby scripts/planctl advance --strict'
+    }
+  end
+
+  def build_status_result(state)
+    completed = Array(state['completed_phases'])
+    phases = manifest_phases
+    available = []
+
+    blocked = phases.each_with_object([]) do |phase, result|
+      next if completed.include?(phase['id'])
+
+      missing_dependencies = Array(phase['depends_on']) - completed
+      placeholder_contract_files = placeholder_contract_files_for(phase)
+
+      if missing_dependencies.empty? && placeholder_contract_files.empty?
+        available << summarize_phase(phase)
+        next
+      end
+
+      result << {
+        'phase_id' => phase['id'],
+        'title' => phase['title'],
+        'missing_dependencies' => missing_dependencies,
+        'placeholder_contract_files' => placeholder_contract_files
+      }
+    end
+
+    remaining_queue = phases.reject { |phase| completed.include?(phase['id']) }.map do |phase|
+      missing_dependencies = Array(phase['depends_on']) - completed
+      placeholder_contract_files = placeholder_contract_files_for(phase)
+      status = if missing_dependencies.empty? && placeholder_contract_files.empty?
+                 'ready'
+               elsif missing_dependencies.empty?
+                 'contract-placeholder'
+               else
+                 'blocked'
+               end
+      summarize_phase(phase).merge(
+        'status' => status,
+        'missing_dependencies' => missing_dependencies,
+        'placeholder_contract_files' => placeholder_contract_files
+      )
+    end
+
+    {
+      'completed_phases' => completed,
+      'available_phases' => available,
+      'blocked_phases' => blocked,
+      'remaining_queue' => remaining_queue,
+      'next_phase' => remaining_queue.first,
+      'state_file' => state_file_relative,
+      'handoff_file' => handoff_file_relative
+    }
+  end
+
+  def build_handoff_snapshot(state)
+    status = build_status_result(state)
+    next_phase = status['next_phase']
+    next_required_context = if next_phase
+                              normalized_context_for(fetch_phase(next_phase['phase_id']))
+                            else
+                              []
+                            end
+
+    {
+      'state_file' => state_file_relative,
+      'handoff_file' => handoff_file_relative,
+      'updated_at' => state['updated_at'],
+      'finalized_at' => state['finalized_at'],
+      'completed_phases' => status['completed_phases'],
+      'recent_completions' => Array(state['completion_log']).last(compression_history_limit).map { |entry| decorate_completion_entry(entry) },
+      'next_phase' => next_phase,
+      'next_required_context' => next_required_context,
+      'remaining_queue' => status['remaining_queue'],
+      'resume_read_order' => resume_read_order,
+      'compression_rules' => compression_rules,
+      'continuous_execution' => @manifest.dig('execution_rule', 'continuous_execution') || {}
+    }
+  end
+
+  def summarize_phase(phase)
+    {
+      'phase_id' => phase['id'],
+      'title' => phase['title'],
+      'plan_file' => phase['plan_file'],
+      'execution_file' => phase['execution_file']
+    }
+  end
+
+  def render_resolve(result, format)
+    case format
+    when 'json'
+      puts JSON.pretty_generate(result)
+    when 'paths'
+      puts result['required_context'].join("\n")
+    else
+      puts 'Phase-Contract phase context'
+      puts "Target phase: #{result['phase_id']} #{result['title']}"
+      puts "Resolver: #{result['resolver']}"
+      puts "State file: #{result['state_file']}"
+      puts "Handoff file: #{result['handoff_file']}"
+      puts
+      puts 'Read these files in order before making changes:'
+      result['required_context'].each_with_index do |path, index|
+        puts "#{index + 1}. #{path}"
+      end
+      puts
+      puts 'Dependency status:'
+      puts "- depends_on: #{format_list(result['depends_on'])}"
+      puts "- completed: #{format_list(result['completed_dependencies'])}"
+      puts "- missing: #{format_list(result['missing_dependencies'])}"
+      puts
+      puts 'Context file status:'
+      puts "- missing files: #{format_list(result['missing_context_files'])}"
+      puts "- placeholder contracts: #{format_list(result['placeholder_contract_files'])}"
+      puts
+      puts 'Execution contract:'
+      puts '- Do not start implementation before reading every required_context file.'
+      puts '- Treat plan/common.md as the global hard constraints.'
+      puts '- Treat the execution file as the scope boundary, deliverable contract, and completion checklist.'
+      puts '- If dependencies or required context files are missing, stop and report the blocker instead of editing files.'
+      if result['placeholder_contract_files'].empty?
+        puts '- If the phase is ready, continue implementation without asking for an extra confirmation at the phase boundary.'
+      else
+        puts '- Current phase is still placeholder-only. Upgrade both the phase plan and execution contracts to formal contracts first.'
+        puts '- Do not start implementation yet, and do not ask the user for a confirmation that the workflow already implies.'
+        puts '- After upgrading the contracts, rerun the same strict command and only start implementation when placeholder contracts are gone.'
+      end
+      puts '- For long multi-phase runs, complete this phase with a summary; complete already refreshes plan/handoff.md atomically.'
+    end
+  end
+
+  def render_no_remaining_phases(format)
+    result = {
+      'complete' => true,
+      'message' => 'All phases are completed.',
+      'state_file' => state_file_relative,
+      'handoff_file' => handoff_file_relative,
+      'finalize_command' => 'ruby scripts/planctl finalize'
+    }
+
+    case format
+    when 'json'
+      puts JSON.pretty_generate(result)
+    else
+      puts 'All phases are completed.'
+      puts "State file: #{result['state_file']}"
+      puts "Handoff file: #{result['handoff_file']}"
+      puts 'Final step: run `ruby scripts/planctl finalize` to print the final execution dashboard and recommended human next steps.'
+    end
+  end
+
+  def render_advance(result, format)
+    case format
+    when 'json'
+      puts JSON.pretty_generate(result)
+    else
+      puts '=== Phase-Contract Advance ==='
+      puts "ACTION: #{result['action']}"
+      puts "STOP_REASON: #{result['stop_reason']}"
+      puts "Continuation mode: #{result.dig('continuation', 'mode') || 'manual'}"
+      puts
+
+      if result['phase']
+        puts "PHASE: #{result['phase']['phase_id']} #{result['phase']['title']}"
+        puts "Plan: #{result['phase']['plan_file']}"
+        puts "Execution: #{result['phase']['execution_file']}"
+        puts
+      end
+
+      case result['action']
+      when 'implement'
+        puts 'Read these files in order before making changes:'
+        result['required_context'].each_with_index do |path, index|
+          puts "#{index + 1}. #{path}"
+        end
+        puts
+        puts 'Next internal action: implement this phase now. Do not ask for phase-boundary confirmation.'
+      when 'promote_placeholder'
+        puts 'Placeholder contracts to upgrade before implementation:'
+        result['placeholder_contract_files'].each { |path| puts "- #{path}" }
+        puts
+        puts 'Next internal actions:'
+        puts '1. Upgrade both phase and execution contracts to formal, objective contracts.'
+        puts '2. Rerun `ruby scripts/planctl advance --strict`.'
+        puts '3. Start implementation only when ACTION becomes implement.'
+        puts
+        puts 'This is a Golden-Loop internal action, not a user confirmation point.'
+      when 'finalize'
+        puts result['message']
+        puts "NEXT_COMMAND: #{result['finalize_command']}"
+      when 'stop'
+        puts 'Blockers:'
+        puts "- missing dependencies: #{format_list(result['missing_dependencies'])}"
+        puts "- missing context files: #{format_list(result['missing_context_files'])}"
+        puts
+        puts 'Stop and report this blocker before editing files.'
+      else
+        puts 'Unknown action. Stop and inspect planctl output.'
+      end
+    end
+  end
+
+  def render_handoff(snapshot, format)
+    case format
+    when 'json'
+      puts JSON.pretty_generate(snapshot)
+    else
+      puts 'Phase-Contract execution handoff'
+      puts "State file: #{snapshot['state_file']}"
+      puts "Handoff file: #{snapshot['handoff_file']}"
+      puts "Updated at: #{snapshot['updated_at'] || 'not recorded yet'}"
+      puts "Finalized at: #{snapshot['finalized_at']}" if snapshot['finalized_at'] && !snapshot['finalized_at'].empty?
+      puts
+      puts "Completed phases: #{snapshot['completed_phases'].empty? ? 'none' : snapshot['completed_phases'].join(', ')}"
+      puts
+      if snapshot['recent_completions'].empty?
+        puts 'Recent completions: none'
+      else
+        puts 'Recent completions:'
+        snapshot['recent_completions'].each do |entry|
+          detail = entry['summary'] || 'no summary recorded'
+          puts "- #{entry['phase_id']}: #{detail}"
+          puts "  next focus: #{entry['next_focus']}" if entry['next_focus']
+        end
+      end
+      puts
+      if snapshot['next_phase']
+        puts "Next phase: #{snapshot['next_phase']['phase_id']} #{snapshot['next_phase']['title']}"
+          unless Array(snapshot['next_phase']['placeholder_contract_files']).empty?
+            puts "Next phase status: placeholder contracts need upgrade first (#{snapshot['next_phase']['placeholder_contract_files'].join(', ')})"
+          end
+        puts 'Read these files next:'
+        snapshot['next_required_context'].each_with_index do |path, index|
+          puts "#{index + 1}. #{path}"
+        end
+      else
+        puts 'Next phase: none'
+      end
+      puts
+      puts 'Compression-safe resume order:'
+      snapshot['resume_read_order'].each_with_index do |item, index|
+        puts "#{index + 1}. #{item}"
+      end
+      puts
+      puts 'Compression rules:'
+      snapshot['compression_rules'].each do |rule|
+        puts "- #{rule}"
+      end
+    end
+  end
+
+  def decorate_completion_entry(entry)
+    phase = fetch_phase(entry['phase_id'])
+    {
+      'phase_id' => entry['phase_id'],
+      'title' => phase['title'],
+      'completed_at' => entry['completed_at'],
+      'summary' => entry['summary'],
+      'next_focus' => entry['next_focus']
+    }
+  end
+
+  def handoff_markdown(snapshot)
+    lines = []
+    lines << '# Phase-Contract Execution Handoff'
+    lines << ''
+    lines << '本文件用于长流程执行时的压缩恢复。不要一次性重新加载全部 phase 文档；恢复时按本文档与 manifest 继续。'
+    lines << ''
+    lines << '## 当前状态'
+    lines << ''
+    lines << "- State file: `#{snapshot['state_file']}`"
+    lines << "- Handoff file: `#{snapshot['handoff_file']}`"
+    lines << "- Updated at: `#{snapshot['updated_at'] || 'not recorded yet'}`"
+    if snapshot['finalized_at'] && !snapshot['finalized_at'].empty?
+      lines << "- Finalized at: `#{snapshot['finalized_at']}`"
+    end
+    lines << "- Completed phases: `#{snapshot['completed_phases'].empty? ? 'none' : snapshot['completed_phases'].join(', ')}`"
+    lines << ''
+
+    lines << '## 最近完成'
+    lines << ''
+    if snapshot['recent_completions'].empty?
+      lines << '- none'
+    else
+      snapshot['recent_completions'].each do |entry|
+        lines << "- `#{entry['phase_id']}` #{entry['title']}: #{entry['summary'] || 'no summary recorded'}"
+        lines << "- next focus: #{entry['next_focus']}" if entry['next_focus']
+      end
+    end
+    lines << ''
+
+    lines << '## 下一 Phase'
+    lines << ''
+    if snapshot['next_phase']
+      lines << "- `#{snapshot['next_phase']['phase_id']}` #{snapshot['next_phase']['title']}"
+      lines << "- plan: `#{snapshot['next_phase']['plan_file']}`"
+      lines << "- execution: `#{snapshot['next_phase']['execution_file']}`"
+      unless Array(snapshot['next_phase']['placeholder_contract_files']).empty?
+        lines << "- status: `placeholder contracts need upgrade first (#{snapshot['next_phase']['placeholder_contract_files'].join(', ')})`"
+      end
+      lines << ''
+      lines << '下一步读取顺序：'
+      snapshot['next_required_context'].each_with_index do |path, index|
+        lines << "#{index + 1}. `#{path}`"
+      end
+    else
+      lines << '- none'
+    end
+    lines << ''
+
+    lines << '## 压缩恢复顺序'
+    lines << ''
+    snapshot['resume_read_order'].each_with_index do |item, index|
+      lines << "#{index + 1}. `#{item}`"
+    end
+    lines << ''
+
+    lines << '## 压缩控制规则'
+    lines << ''
+    snapshot['compression_rules'].each do |rule|
+      lines << "- #{rule}"
+    end
+    lines << ''
+
+    lines << '## 连续执行命令'
+    lines << ''
+    continuous_execution = snapshot['continuous_execution']
+    lines << "- next: `#{continuous_execution['next_command']}`" if continuous_execution['next_command']
+    lines << "- complete: `#{continuous_execution['completion_command']}`" if continuous_execution['completion_command']
+    lines << "- handoff-repair (manual recovery only): `ruby scripts/planctl handoff --write`"
+    lines << ''
+
+    lines.join("\n")
+  end
+
+  def normalized_context_for(phase)
+    unique_paths(
+      Array(@manifest.dig('execution_rule', 'required_context')) +
+      Array(phase['required_context']) +
+      [phase['plan_file'], phase['execution_file']]
+    )
+  end
+
+  def unique_paths(paths)
+    paths.compact.each_with_object([]) do |path, result|
+      result << path unless result.include?(path)
+    end
+  end
+
+  def first_remaining_phase(completed)
+    manifest_phases.find { |phase| !completed.include?(phase['id']) }
+  end
+
+  def blank?(value)
+    value.nil? || value.strip.empty?
+  end
+
+  def format_list(values)
+    values.empty? ? 'none' : values.join(', ')
+  end
+
+  def placeholder_contract_files_for(phase)
+    [phase['plan_file'], phase['execution_file']].compact.select { |path| contract_placeholder?(path) }
+  end
+
+  def contract_placeholder?(relative_path)
+    path = @repo_root.join(relative_path)
+    return false unless path.file?
+
+    header = read_text_file(path).lines.first(PLACEHOLDER_HEADER_LINE_LIMIT).join
+    return true if PLACEHOLDER_SENTINELS.any? { |marker| header.include?(marker) }
+
+    return false unless header.match?(/占位|placeholder/i)
+
+    PLACEHOLDER_HINT_PATTERNS.any? { |pattern| header.match?(pattern) }
+  end
+
+  def fetch_phase(phase_id)
+    phase = manifest_phases.find { |entry| entry['id'] == phase_id }
+    return phase if phase
+
+    warn "Unknown phase: #{phase_id}"
+    warn "Known phases: #{manifest_phases.map { |entry| entry['id'] }.join(', ')}"
+    exit 1
+  end
+
+  def manifest_phases
+    Array(@manifest['phases'])
+  end
+
+  def load_state(create_if_missing: false)
+    path = state_file_path
+    if path.file?
+      state = load_yaml(path)
+      check_state_schema!(state, path)
+      return state
+    end
+
+    initial_state = default_state
+
+    write_state(initial_state) if create_if_missing
+    initial_state
+  end
+
+  def default_state
+    {
+      'version' => STATE_SCHEMA_VERSION,
+      'completed_phases' => [],
+      'completion_log' => []
+    }
+  end
+
+  def check_state_schema!(state, path)
+    version = state['version']
+    return if version.nil? # legacy file without version — tolerate
+    return if version.is_a?(Integer) && version <= STATE_SCHEMA_VERSION
+
+    warn "[planctl] error: #{path} declares schema version #{version.inspect}, but this planctl only understands <= #{STATE_SCHEMA_VERSION}."
+    warn '[planctl] Upgrade scripts/planctl before continuing, or restore the previous state.yaml.'
+    exit 2
+  end
+
+  def write_state(state)
+    path = state_file_path
+    path.dirname.mkpath
+    atomic_write(path, YAML.dump(state))
+  end
+
+  def write_handoff_file(state, snapshot = nil)
+    path = handoff_file_path
+    path.dirname.mkpath
+    atomic_write(path, handoff_markdown(snapshot || build_handoff_snapshot(state)))
+  end
+
+  # Atomic write via tmp + rename. Prevents half-written state.yaml /
+  # handoff.md if the process is interrupted mid-write. Keeps state and
+  # handoff in lock-step when `complete` writes them back-to-back: the old
+  # file stays intact until the new payload is fully flushed to disk.
+  def atomic_write(path, content)
+    path = Pathname.new(path)
+    tmp = path.sub_ext(path.extname + ".tmp.#{Process.pid}")
+    File.open(tmp, 'w') do |f|
+      f.write(content)
+      f.flush
+      begin
+        f.fsync
+      rescue NotImplementedError, Errno::EINVAL
+        # fsync unsupported on some filesystems (tmpfs on CI); skip silently.
+      end
+    end
+    File.rename(tmp, path)
+  end
+
+  def state_file_relative
+    @manifest.dig('execution_rule', 'state_file') || 'plan/state.yaml'
+  end
+
+  def state_file_path
+    @repo_root.join(state_file_relative)
+  end
+
+  def handoff_file_relative
+    @manifest.dig('execution_rule', 'handoff_file') || 'plan/handoff.md'
+  end
+
+  def handoff_file_path
+    @repo_root.join(handoff_file_relative)
+  end
+
+  def compression_history_limit
+    @manifest.dig('execution_rule', 'compression_control', 'max_completion_history') || 3
+  end
+
+  def resume_read_order
+    Array(@manifest.dig('execution_rule', 'compression_control', 'resume_read_order'))
+  end
+
+  def compression_rules
+    Array(@manifest.dig('execution_rule', 'compression_control', 'rules'))
+  end
+
+  def continuation_policy
+    @manifest.dig('execution_rule', 'continuation') || {}
+  end
+
+  def autonomous_continuation?
+    continuation_policy['mode'].to_s == 'autonomous'
+  end
+
+  # ---- finalize helpers ---------------------------------------------------
+
+  def validate_finalize_readiness!(state)
+    errors = finalize_readiness_errors(state)
+    return if errors.empty?
+
+    warn 'Cannot finalize: final dashboard requires every manifest phase to be completed and successful.'
+    errors.each { |error| warn "- #{error}" }
+    warn '[planctl] No finalization ledger was written and no dashboard was printed. Run `ruby scripts/planctl advance --strict` to resume or repair the ledger.'
+    exit 2
+  end
+
+  def finalize_readiness_errors(state)
+    phases = manifest_phases
+    phase_ids = phases.map { |phase| phase['id'] }
+    completed = Array(state['completed_phases'])
+    errors = []
+
+    if phases.empty?
+      errors << 'manifest has no phases.'
+      return errors
+    end
+
+    if completed.empty?
+      errors << 'state.yaml has no completed phases.'
+    end
+
+    missing = phase_ids - completed
+    unless missing.empty?
+      errors << "#{missing.length} phase(s) still pending: #{missing.join(', ')}."
+    end
+
+    unknown = completed - phase_ids
+    unless unknown.empty?
+      errors << "state.yaml completed_phases contains unknown phase(s): #{unknown.join(', ')}."
+    end
+
+    duplicates = completed.group_by(&:itself).select { |_id, values| values.length > 1 }.keys
+    unless duplicates.empty?
+      errors << "state.yaml completed_phases contains duplicate phase id(s): #{duplicates.join(', ')}."
+    end
+
+    completion_entries = completion_entries_by_phase(state)
+    phases.each do |phase|
+      phase_id = phase['id']
+      next unless completed.include?(phase_id)
+
+      entry = completion_entries[phase_id]
+      if entry.nil?
+        errors << "phase #{phase_id} is listed in completed_phases but has no completed_at entry in completion_log."
+        next
+      end
+
+      if parse_iso8601(entry['completed_at']).nil?
+        errors << "phase #{phase_id} has invalid completed_at timestamp: #{entry['completed_at'].inspect}."
+      end
+
+      checks = normalize_check_entries(entry['checks'])
+      if checks.empty?
+        errors << "phase #{phase_id} has no recorded checks in completion_log."
+        next
+      end
+
+      malformed_checks = checks.reject { |check| check.is_a?(Hash) }
+      unless malformed_checks.empty?
+        errors << "phase #{phase_id} has malformed check entries in completion_log."
+        next
+      end
+
+      required_checks = checks.select { |check| check_required?(check) }
+      if required_checks.empty?
+        errors << "phase #{phase_id} has no required check evidence in completion_log."
+      end
+
+      expected_required_ids = expected_required_check_ids_for(phase)
+      actual_required_ids = required_checks.map { |check| check['id'].to_s }
+      missing_required_ids = expected_required_ids - actual_required_ids
+      unless missing_required_ids.empty?
+        errors << "phase #{phase_id} missing required check evidence: #{missing_required_ids.join(', ')}."
+      end
+
+      required_checks.each do |check|
+        next if check['status'].to_s == 'passed'
+
+        id = check['id'] || '(unknown)'
+        status = check['status'] || '(missing-status)'
+        errors << "phase #{phase_id} required check #{id} failed (status=#{status}, exit=#{check['exit_code'] || 'n/a'})."
+      end
+    end
+
+    errors
+  end
+
+  def completion_entries_by_phase(state)
+    Array(state['completion_log']).each_with_object({}) do |entry, result|
+      next unless entry.is_a?(Hash)
+      next if blank?(entry['phase_id'].to_s)
+      next if blank?(entry['completed_at'].to_s)
+
+      result[entry['phase_id']] = entry
+    end
+  end
+
+  def normalize_check_entries(raw_checks)
+    case raw_checks
+    when Array
+      raw_checks
+    when Hash
+      [raw_checks]
+    else
+      []
+    end
+  end
+
+  def check_required?(check)
+    check['required'] != false
+  end
+
+  def expected_required_check_ids_for(phase)
+    declared_ids = declared_checks_for(phase, 'required').map do |definition|
+      id = definition['id'].to_s.strip
+      id.empty? ? '(missing-id)' : id
+    end
+
+    ['contract-lint', *declared_ids].uniq
+  end
+
+  def build_finalize_dashboard(state)
+    completed = Array(state['completed_phases'])
+    log_by_id = {}
+    Array(state['completion_log']).each do |entry|
+      next unless entry.is_a?(Hash)
+      next unless entry['phase_id']
+      next unless entry['completed_at']
+      # last-write-wins so that re-completion (rare) reflects the latest run
+      log_by_id[entry['phase_id']] = entry
+    end
+
+    phase_rows = manifest_phases.map do |phase|
+      entry = log_by_id[phase['id']] || {}
+      sha = capture_git('log', '--grep', "^Phase-Id: #{phase['id']}$", '-n', '1', '--format=%H').strip
+      {
+        'phase_id' => phase['id'],
+        'title' => phase['title'],
+        'completed_at' => entry['completed_at'],
+        'summary' => entry['summary'],
+        'next_focus' => entry['next_focus'],
+        'milestone_commit' => sha.empty? ? nil : sha
+      }
+    end
+
+    timestamps = phase_rows.map { |r| parse_iso8601(r['completed_at']) }.compact.sort
+    elapsed_seconds = timestamps.length >= 2 ? (timestamps.last - timestamps.first).to_i : nil
+
+    git_state = build_git_finalize_state
+    health = build_finalize_health(state)
+
+    {
+      'project' => @manifest['project'],
+      'repository' => @repo_root.to_s,
+      'manifest_file' => 'plan/manifest.yaml',
+      'state_file' => state_file_relative,
+      'handoff_file' => handoff_file_relative,
+      'finalized_at' => state['finalized_at'],
+      'phases_total' => manifest_phases.length,
+      'phases_completed' => completed.length,
+      'first_completion_at' => timestamps.first&.iso8601,
+      'last_completion_at' => timestamps.last&.iso8601,
+      'elapsed_seconds' => elapsed_seconds,
+      'elapsed_human' => elapsed_seconds && format_elapsed(elapsed_seconds),
+      'phase_rows' => phase_rows,
+      'git' => git_state,
+      'health' => health,
+      'recommended_next_steps' => build_finalize_recommendations(git_state, health, phase_rows)
+    }
+  end
+
+  def parse_iso8601(value)
+    return nil if value.nil? || value.empty?
+    Time.iso8601(value)
+  rescue ArgumentError
+    nil
+  end
+
+  def format_elapsed(seconds)
+    seconds = seconds.to_i
+    return '<1 minute' if seconds < 60
+
+    days, rem = seconds.divmod(86_400)
+    hours, rem = rem.divmod(3600)
+    minutes = rem / 60
+    parts = []
+    parts << "#{days}d" if days.positive?
+    parts << "#{hours}h" if hours.positive?
+    parts << "#{minutes}m" if minutes.positive? || parts.empty?
+    parts.join(' ')
+  end
+
+  def build_git_finalize_state
+    return { 'enabled' => false } if git_opt_out? || !git_work_tree?
+
+    branch = capture_git('rev-parse', '--abbrev-ref', 'HEAD').strip
+    branch = nil if branch.empty? || branch == 'HEAD'
+    upstream = capture_git_silent('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}').strip
+    upstream = nil if upstream.empty?
+
+    ahead_behind = nil
+    if upstream
+      raw = capture_git_silent('rev-list', '--left-right', '--count', "#{upstream}...HEAD").strip
+      if raw =~ /^(\d+)\s+(\d+)$/
+        ahead_behind = { 'behind' => Regexp.last_match(1).to_i, 'ahead' => Regexp.last_match(2).to_i }
+      end
+    end
+
+    porcelain = capture_git('status', '--porcelain').lines.map(&:chomp).reject(&:empty?)
+    remotes = capture_git('remote').split("\n").reject(&:empty?)
+    last_commit = capture_git('log', '-n', '1', '--format=%h %s').strip
+
+    {
+      'enabled' => true,
+      'branch' => branch,
+      'upstream' => upstream,
+      'ahead_behind' => ahead_behind,
+      'working_tree_clean' => porcelain.empty?,
+      'pending_changes' => porcelain,
+      'remotes' => remotes,
+      'last_commit' => last_commit.empty? ? nil : last_commit
+    }
+  end
+
+  def build_finalize_health(state)
+    require 'digest'
+    issues = []
+    notes = []
+
+    manifest_phases.each do |phase|
+      %w[plan_file execution_file].each do |key|
+        path = phase[key]
+        if path.nil? || path.empty?
+          issues << "manifest phase #{phase['id']} missing #{key}"
+        elsif !@repo_root.join(path).file?
+          issues << "manifest phase #{phase['id']}: #{key} #{path} missing on disk"
+        end
+      end
+    end
+
+    state_path = state_file_path
+    handoff_path = handoff_file_path
+    issues << 'state.yaml missing on disk' unless state_path.file?
+    issues << 'handoff.md missing on disk' unless handoff_path.file?
+
+    known_ids = manifest_phases.map { |p| p['id'] }
+    Array(state['completed_phases']).each do |id|
+      issues << "state.yaml lists completed phase #{id} not present in manifest" unless known_ids.include?(id)
+    end
+
+    instruction_files = %w[.github/copilot-instructions.md CLAUDE.md AGENTS.md]
+    existing = instruction_files.select { |p| @repo_root.join(p).file? }
+    if existing.empty?
+      notes << 'no agent instruction files found (Copilot/Claude/Codex)'
+    elsif existing.length < instruction_files.length
+      notes << "agent instruction file(s) missing: #{(instruction_files - existing).join(', ')}"
+    else
+      hashes = existing.map { |p| Digest::SHA256.hexdigest(@repo_root.join(p).read) }
+      if hashes.uniq.length > 1
+        issues << 'agent instruction files diverge (copilot/CLAUDE/AGENTS not byte-identical)'
+      else
+        notes << "agent instructions in sync (sha256=#{hashes.first[0, 12]})"
+      end
+    end
+
+    {
+      'issues' => issues,
+      'notes' => notes
+    }
+  end
+
+  def build_finalize_recommendations(git_state, health, phase_rows)
+    recs = []
+
+    if git_state['enabled']
+      unless git_state['working_tree_clean']
+        recs << "工作树尚有 #{git_state['pending_changes'].length} 处未提交变更，先 `git status` 审视并决定提交、暂存或丢弃，再做后续动作。"
+      end
+      ahead = git_state.dig('ahead_behind', 'ahead').to_i
+      behind = git_state.dig('ahead_behind', 'behind').to_i
+      if git_state['upstream'].nil?
+        if git_state['remotes'].empty?
+          recs << '仓库当前无 git remote。如需协作或留档，先 `git remote add origin <url>` 并 `git push -u origin HEAD`，把里程碑链路落到远端。'
+        else
+          recs << "当前分支无 upstream。运行 `git push -u #{git_state['remotes'].first} HEAD` 让里程碑可被审计。"
+        end
+      elsif ahead.positive?
+        recs << "本地比 upstream 领先 #{ahead} 个 commit，先 `git push` 让远端追上里程碑链。"
+      end
+      if behind.positive?
+        recs << "本地比 upstream 落后 #{behind} 个 commit；先 `git pull --rebase` 对齐再做收尾决定。"
+      end
+    else
+      recs << '当前为非 git 工作区模式（PHASE_CONTRACT_ALLOW_NON_GIT=1）。请按 `plan/common.md` 的偏离风险段所述的方式做一次外部审计与归档。'
+    end
+
+    missing_summary_phases = phase_rows.reject { |r| r['summary'] && !r['summary'].strip.empty? }
+    if missing_summary_phases.any?
+      recs << "下列 phase 没有完成摘要，建议补一次手动追述：#{missing_summary_phases.map { |r| r['phase_id'] }.join(', ')}。"
+    end
+    missing_milestone = phase_rows.reject { |r| r['milestone_commit'] }
+    if missing_milestone.any?
+      recs << "下列 phase 找不到 `Phase-Id: <id>` trailer 对应的里程碑 commit：#{missing_milestone.map { |r| r['phase_id'] }.join(', ')}。可能是手动 commit 或 history 被改写过，请人工核对一遍。"
+    end
+
+    if health['issues'].any?
+      recs << "Doctor 级问题（必须人工处置）：#{health['issues'].join('；')}。"
+    end
+
+    # Universal closing actions, in deliberate order.
+    recs << '跑一次端到端验收：单 phase 的交付检查只覆盖局部，最后必须有一次跨 phase 的功能/集成/性能/安全验收，确认整体目标真正达成。'
+    recs << '组织一次人工 code review：把里程碑 commit 链 + plan/state.yaml + plan/handoff.md + plan/phases 作为审计材料，让至少一位非本任务执行者审阅。'
+    recs << '决定如何打 release：若交付物对应可发布版本，运行 `git tag -a vX.Y.Z -m "..."` 并 push tag；否则在变更日志或交接文档中写清楚“此次未发版”的理由。'
+    recs << '把 plan/ 归档：保留作为复盘材料；若同一仓库还要继续下一轮规划，先 `git mv plan plan-archive-<date>` 再重跑本 Skill 生成新 plan，避免污染当前 manifest。'
+    recs << '写一份对外交付说明 / 复盘：面向相关方说明做了什么、为何这么做、留下什么风险与待办（区别于 phase 内 summary 的局部叙述）。'
+    recs << '与人类决策点对齐：是否上线、是否对外发布、是否安排长期维护、是否进入下一项规划。AI 不要自行决定这些；finalize 输出仅作为决策素材。'
+
+    recs
+  end
+
+  def render_finalize_dashboard(d)
+    puts '=== Phase-Contract Final Execution Dashboard ==='
+    puts "Project: #{d['project'] || '(unnamed)'}"
+    puts "Repository: #{d['repository']}"
+    puts "Manifest: #{d['manifest_file']}"
+    puts "State file: #{d['state_file']}"
+    puts "Handoff file: #{d['handoff_file']}"
+    puts "Finalized at: #{d['finalized_at']}" if d['finalized_at'] && !d['finalized_at'].empty?
+    puts
+    puts "Phases: #{d['phases_completed']}/#{d['phases_total']} completed"
+    if d['first_completion_at'] && d['last_completion_at']
+      puts "First completion: #{d['first_completion_at']}"
+      puts "Last completion:  #{d['last_completion_at']}"
+      puts "Elapsed: #{d['elapsed_human'] || 'n/a'}" if d['elapsed_human']
+    end
+    puts
+    puts '--- Phase ledger ---'
+    d['phase_rows'].each_with_index do |row, idx|
+      sha = row['milestone_commit'] ? row['milestone_commit'][0, 10] : '----------'
+      ts = row['completed_at'] || 'unknown'
+      puts "#{idx + 1}. [#{sha}] #{row['phase_id']}  #{row['title']}"
+      puts "   completed_at: #{ts}"
+      puts "   summary: #{row['summary'] || '(none recorded)'}"
+      puts "   next_focus: #{row['next_focus']}" if row['next_focus'] && !row['next_focus'].empty?
+    end
+    puts
+    puts '--- Repository state ---'
+    git = d['git']
+    if git['enabled']
+      puts "Branch: #{git['branch'] || '(detached)'}"
+      puts "Upstream: #{git['upstream'] || '(none)'}"
+      if git['ahead_behind']
+        puts "Ahead/Behind upstream: ahead=#{git['ahead_behind']['ahead']} behind=#{git['ahead_behind']['behind']}"
+      end
+      puts "Working tree: #{git['working_tree_clean'] ? 'clean' : "dirty (#{git['pending_changes'].length} pending)"}"
+      unless git['working_tree_clean']
+        git['pending_changes'].first(10).each { |line| puts "  #{line}" }
+        puts "  ... (#{git['pending_changes'].length - 10} more)" if git['pending_changes'].length > 10
+      end
+      puts "Remotes: #{git['remotes'].empty? ? 'none' : git['remotes'].join(', ')}"
+      puts "Last commit: #{git['last_commit']}" if git['last_commit']
+    else
+      puts 'git: disabled (PHASE_CONTRACT_ALLOW_NON_GIT=1 or non-git workspace)'
+    end
+    puts
+    puts '--- Health checks ---'
+    d['health']['notes'].each { |n| puts "note:  #{n}" }
+    if d['health']['issues'].empty?
+      puts 'ok:    no doctor-level issues detected'
+    else
+      d['health']['issues'].each { |i| puts "issue: #{i}" }
+    end
+    puts
+    puts '--- Recommended human next steps ---'
+    d['recommended_next_steps'].each_with_index do |rec, idx|
+      puts "#{idx + 1}. #{rec}"
+    end
+    puts
+    puts 'Reminder for the AI: render this dashboard verbatim to the human, layer your own deep review on top, and stop. Do not auto-execute the recommendations — they are deliberate human decision points.'
+  end
+
+  def load_yaml(path)
+    YAML.safe_load(read_text_file(path), permitted_classes: [], aliases: false) || {}
+  rescue Psych::SyntaxError => error
+    warn "Failed to parse YAML: #{path}"
+    warn error.message
+    exit 1
+  end
+
+  def read_text_file(path)
+    File.read(path.to_s, mode: 'r:UTF-8')
+  end
+end
+
+def usage
+  <<~USAGE
+    Usage:
+      ruby scripts/planctl resolve <phase-id> [--format prompt|json|paths] [--strict]
+      ruby scripts/planctl next [--format prompt|json|paths] [--strict]
+      ruby scripts/planctl advance [--format prompt|json] [--strict]
+      ruby scripts/planctl status [--format text|json]
+      ruby scripts/planctl lint-contracts [--phase <phase-id> | --all]
+      ruby scripts/planctl complete <phase-id> [--summary TEXT] [--next-focus TEXT] [--continue]
+      ruby scripts/planctl revert <phase-id> [--mode revert|reset] [--summary TEXT]
+      ruby scripts/planctl handoff [--format prompt|json] [--write]
+      ruby scripts/planctl resume [--strict]
+      ruby scripts/planctl doctor
+      ruby scripts/planctl finalize [--format text|json]
+  USAGE
+end
+
+script_path = File.expand_path(__FILE__)
+repo_root = File.expand_path('..', File.dirname(script_path))
+planctl = PlanCtl.new(repo_root)
+
+command = ARGV.shift
+
+case command
+when 'resolve'
+  options = { format: 'prompt', strict: false }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--format FORMAT', 'prompt, json, or paths') { |value| options[:format] = value }
+    opts.on('--strict', 'Exit non-zero if dependencies or context files are missing') { options[:strict] = true }
+  end
+  parser.parse!(ARGV)
+  phase_id = ARGV.shift
+  if phase_id.nil? || ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.resolve(phase_id, format: options[:format], strict: options[:strict])
+when 'next'
+  options = { format: 'prompt', strict: false }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--format FORMAT', 'prompt, json, or paths') { |value| options[:format] = value }
+    opts.on('--strict', 'Exit non-zero if dependencies or context files are missing') { options[:strict] = true }
+  end
+  parser.parse!(ARGV)
+  if ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.next_phase(format: options[:format], strict: options[:strict])
+when 'advance'
+  options = { format: 'prompt', strict: false }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--format FORMAT', 'prompt or json') { |value| options[:format] = value }
+    opts.on('--strict', 'Exit non-zero only for real blockers; placeholder promotion remains an internal action') { options[:strict] = true }
+  end
+  parser.parse!(ARGV)
+  if ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.advance(format: options[:format], strict: options[:strict])
+when 'status'
+  options = { format: 'text' }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--format FORMAT', 'text or json') { |value| options[:format] = value }
+  end
+  parser.parse!(ARGV)
+  if ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.status(format: options[:format])
+when 'lint-contracts'
+  options = { phase_id: nil, all: false }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--phase PHASE_ID', 'Lint a specific phase contract pair') { |value| options[:phase_id] = value }
+    opts.on('--all', 'Lint every manifest phase; future placeholder phases only get structural checks') { options[:all] = true }
+  end
+  parser.parse!(ARGV)
+  if ARGV.any? || (options[:all] && options[:phase_id])
+    warn parser.to_s
+    exit 1
+  end
+  planctl.lint_contracts(phase_id: options[:phase_id], all: options[:all])
+when 'complete'
+  options = { summary: nil, next_focus: nil, continue: false }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--summary TEXT', 'Concise completion summary to persist for resume') { |value| options[:summary] = value }
+    opts.on('--next-focus TEXT', 'Concise note about what should happen next') { |value| options[:next_focus] = value }
+    opts.on('--continue', 'Resolve the next internal action immediately after completion') { options[:continue] = true }
+  end
+  parser.parse!(ARGV)
+  phase_id = ARGV.shift
+  if phase_id.nil? || ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.complete(phase_id, summary: options[:summary], next_focus: options[:next_focus], continue_run: options[:continue])
+when 'revert'
+  options = { mode: 'revert', summary: nil }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--mode MODE', 'revert (default, safe) or reset (destructive, rewrites history)') { |value| options[:mode] = value }
+    opts.on('--summary TEXT', 'Optional reason recorded in the completion log') { |value| options[:summary] = value }
+  end
+  parser.parse!(ARGV)
+  phase_id = ARGV.shift
+  if phase_id.nil? || ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.revert(phase_id, mode: options[:mode], summary: options[:summary])
+when 'handoff'
+  options = { format: 'prompt', write: false }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--format FORMAT', 'prompt or json') { |value| options[:format] = value }
+    opts.on('--write', 'Write the current handoff snapshot to plan/handoff.md') { options[:write] = true }
+  end
+  parser.parse!(ARGV)
+  if ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.handoff(format: options[:format], write: options[:write])
+when 'resume'
+  options = { strict: false }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--strict', 'Exit non-zero if next phase is not ready') { options[:strict] = true }
+  end
+  parser.parse!(ARGV)
+  if ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.resume(strict: options[:strict])
+when 'doctor'
+  parser = OptionParser.new { |opts| opts.banner = usage }
+  parser.parse!(ARGV)
+  if ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.doctor
+when 'finalize'
+  options = { format: 'text' }
+  parser = OptionParser.new do |opts|
+    opts.banner = usage
+    opts.on('--format FORMAT', 'text or json') { |value| options[:format] = value }
+  end
+  parser.parse!(ARGV)
+  if ARGV.any?
+    warn parser.to_s
+    exit 1
+  end
+  planctl.finalize(format: options[:format])
+else
+  warn usage
+  exit 1
+end

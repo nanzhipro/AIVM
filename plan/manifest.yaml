@@ -1,0 +1,329 @@
+---
+version: 1
+kind: aivm-plan-manifest
+project: AIVM
+project_positioning: >-
+  Native macOS Linux VM MVP based on Apple Virtualization.framework, scoped to one persistent Apple silicon ARM64 VM with concise zh-Hans, en, and ja product copy.
+entrypoints:
+  overview: README.md
+  product_requirements: PRD.md
+  common: plan/common.md
+  workflow: plan/workflow.md
+  handoff: plan/handoff.md
+execution_rule:
+  description: >-
+    Execute one phase at a time with the global constraints, the current phase contract, and the current execution contract. The resolver decides the next action; agents implement inside the current boundary only.
+  resolver: scripts/planctl
+  state_file: plan/state.yaml
+  handoff_file: plan/handoff.md
+  require_phase_checks: true
+  enforce_allowed_paths: true
+  repo_instructions:
+    - .github/copilot-instructions.md
+    - CLAUDE.md
+    - AGENTS.md
+  continuous_execution:
+    next_command: ruby scripts/planctl advance --strict
+    completion_command: >-
+      ruby scripts/planctl complete <phase-id> --summary "<summary>" --next-focus "<next-focus>" --continue
+    contract_lint_command: ruby scripts/planctl lint-contracts --phase <phase-id>
+  continuation:
+    mode: autonomous
+    stop_only_on:
+      - dependency_missing
+      - missing_context
+      - required_gate_failed
+      - git_conflict
+      - destructive_operation_required
+      - all_phases_completed
+    non_stop_actions:
+      - phase_completed
+      - next_phase_ready
+      - placeholder_contract_promotion
+      - optional_check_failed
+      - no_remote_configured
+  enforcement:
+    dependency_check: true
+    stop_on_missing_context: true
+    require_execution_file: true
+    require_contract_lint: true
+    require_runtime_evidence: true
+  compression_control:
+    enabled: true
+    max_completion_history: 3
+    resume_read_order:
+      - plan/manifest.yaml
+      - plan/handoff.md
+      - next.phase.required_context
+    rules:
+      - 永远不要一次性加载所有 phase 文档。
+      - 只在当前 phase 读取 plan/common.md、当前 phase plan 和当前 phase execution。
+      - 每完成一个 phase 后更新 handoff，再进入下一 phase。
+  read_order:
+    - plan/common.md
+    - phase.plan_file
+    - phase.execution_file
+  required_context:
+    - plan/common.md
+phases:
+  - id: phase-0-app-shell-i18n
+    title: Native app shell and i18n copy foundation
+    plan_file: plan/phases/phase-0-app-shell-i18n.md
+    execution_file: plan/execution/phase-0-app-shell-i18n.md
+    required_context:
+      - plan/common.md
+      - plan/phases/phase-0-app-shell-i18n.md
+      - plan/execution/phase-0-app-shell-i18n.md
+    depends_on: []
+    allowed_paths:
+      - PRD.md
+      - plan/**
+      - scripts/planctl
+      - .github/copilot-instructions.md
+      - CLAUDE.md
+      - AGENTS.md
+      - .gitignore
+      - project.yml
+      - plan/phases/phase-0-app-shell-i18n.md
+      - plan/execution/phase-0-app-shell-i18n.md
+      - AIVM.xcodeproj/**
+      - AIVM/**
+      - AIVMTests/**
+      - AIVMUITests/**
+      - scripts/audit_localizations.rb
+      - README.md
+    checks:
+      required:
+        - id: contract-lint
+          command: ruby scripts/planctl lint-contracts --phase phase-0-app-shell-i18n
+          timeout_seconds: 60
+        - id: xcode-project-list
+          command: xcodebuild -list -project AIVM.xcodeproj
+          timeout_seconds: 120
+        - id: localization-audit
+          command: ruby scripts/audit_localizations.rb
+          timeout_seconds: 120
+        - id: macos-build-test
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' build test"
+          timeout_seconds: 1800
+      optional:
+        - id: ui-smoke
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' -only-testing:AIVMUITests test"
+          timeout_seconds: 1800
+  - id: phase-1-vm-model-persistence
+    title: VM model and bundle persistence
+    plan_file: plan/phases/phase-1-vm-model-persistence.md
+    execution_file: plan/execution/phase-1-vm-model-persistence.md
+    required_context:
+      - plan/common.md
+      - plan/phases/phase-1-vm-model-persistence.md
+      - plan/execution/phase-1-vm-model-persistence.md
+    depends_on:
+      - phase-0-app-shell-i18n
+    allowed_paths:
+      - plan/phases/phase-1-vm-model-persistence.md
+      - plan/execution/phase-1-vm-model-persistence.md
+      - AIVM.xcodeproj/**
+      - AIVM/**
+      - AIVMTests/**
+      - scripts/audit_vm_bundle_schema.rb
+    checks:
+      required:
+        - id: contract-lint
+          command: ruby scripts/planctl lint-contracts --phase phase-1-vm-model-persistence
+          timeout_seconds: 60
+        - id: vm-bundle-schema-audit
+          command: ruby scripts/audit_vm_bundle_schema.rb
+          timeout_seconds: 120
+        - id: macos-build-test
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' build test"
+          timeout_seconds: 1800
+  - id: phase-2-admission-policy
+    title: Host admission and resource policy
+    plan_file: plan/phases/phase-2-admission-policy.md
+    execution_file: plan/execution/phase-2-admission-policy.md
+    required_context:
+      - plan/common.md
+      - plan/phases/phase-2-admission-policy.md
+      - plan/execution/phase-2-admission-policy.md
+    depends_on:
+      - phase-1-vm-model-persistence
+    allowed_paths:
+      - plan/phases/phase-2-admission-policy.md
+      - plan/execution/phase-2-admission-policy.md
+      - AIVM.xcodeproj/**
+      - AIVM/**
+      - AIVMTests/**
+      - scripts/audit_admission_policy.rb
+    checks:
+      required:
+        - id: contract-lint
+          command: ruby scripts/planctl lint-contracts --phase phase-2-admission-policy
+          timeout_seconds: 60
+        - id: admission-policy-audit
+          command: ruby scripts/audit_admission_policy.rb
+          timeout_seconds: 120
+        - id: macos-build-test
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' build test"
+          timeout_seconds: 1800
+  - id: phase-3-vz-configuration
+    title: Virtualization configuration builder
+    plan_file: plan/phases/phase-3-vz-configuration.md
+    execution_file: plan/execution/phase-3-vz-configuration.md
+    required_context:
+      - plan/common.md
+      - plan/phases/phase-3-vz-configuration.md
+      - plan/execution/phase-3-vz-configuration.md
+    depends_on:
+      - phase-2-admission-policy
+    allowed_paths:
+      - plan/phases/phase-3-vz-configuration.md
+      - plan/execution/phase-3-vz-configuration.md
+      - AIVM.xcodeproj/**
+      - AIVM/**
+      - AIVMTests/**
+      - scripts/audit_virtualization_config.rb
+    checks:
+      required:
+        - id: contract-lint
+          command: ruby scripts/planctl lint-contracts --phase phase-3-vz-configuration
+          timeout_seconds: 60
+        - id: virtualization-config-audit
+          command: ruby scripts/audit_virtualization_config.rb
+          timeout_seconds: 120
+        - id: macos-build-test
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' build test"
+          timeout_seconds: 1800
+  - id: phase-4-lifecycle-state
+    title: VM lifecycle and state machine
+    plan_file: plan/phases/phase-4-lifecycle-state.md
+    execution_file: plan/execution/phase-4-lifecycle-state.md
+    required_context:
+      - plan/common.md
+      - plan/phases/phase-4-lifecycle-state.md
+      - plan/execution/phase-4-lifecycle-state.md
+    depends_on:
+      - phase-3-vz-configuration
+    allowed_paths:
+      - plan/phases/phase-4-lifecycle-state.md
+      - plan/execution/phase-4-lifecycle-state.md
+      - AIVM.xcodeproj/**
+      - AIVM/**
+      - AIVMTests/**
+      - scripts/audit_lifecycle_state.rb
+    checks:
+      required:
+        - id: contract-lint
+          command: ruby scripts/planctl lint-contracts --phase phase-4-lifecycle-state
+          timeout_seconds: 60
+        - id: lifecycle-state-audit
+          command: ruby scripts/audit_lifecycle_state.rb
+          timeout_seconds: 120
+        - id: macos-build-test
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' build test"
+          timeout_seconds: 1800
+  - id: phase-5-vm-ui
+    title: Create, detail, and VM run UI
+    plan_file: plan/phases/phase-5-vm-ui.md
+    execution_file: plan/execution/phase-5-vm-ui.md
+    required_context:
+      - plan/common.md
+      - plan/phases/phase-5-vm-ui.md
+      - plan/execution/phase-5-vm-ui.md
+    depends_on:
+      - phase-4-lifecycle-state
+    allowed_paths:
+      - plan/phases/phase-5-vm-ui.md
+      - plan/execution/phase-5-vm-ui.md
+      - AIVM.xcodeproj/**
+      - AIVM/**
+      - AIVMTests/**
+      - AIVMUITests/**
+      - scripts/audit_localizations.rb
+    checks:
+      required:
+        - id: contract-lint
+          command: ruby scripts/planctl lint-contracts --phase phase-5-vm-ui
+          timeout_seconds: 60
+        - id: localization-audit
+          command: ruby scripts/audit_localizations.rb
+          timeout_seconds: 120
+        - id: macos-build-test
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' build test"
+          timeout_seconds: 1800
+      optional:
+        - id: ui-smoke
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' -only-testing:AIVMUITests test"
+          timeout_seconds: 1800
+  - id: phase-6-errors-diagnostics
+    title: Error recovery and local diagnostics
+    plan_file: plan/phases/phase-6-errors-diagnostics.md
+    execution_file: plan/execution/phase-6-errors-diagnostics.md
+    required_context:
+      - plan/common.md
+      - plan/phases/phase-6-errors-diagnostics.md
+      - plan/execution/phase-6-errors-diagnostics.md
+    depends_on:
+      - phase-5-vm-ui
+    allowed_paths:
+      - plan/phases/phase-6-errors-diagnostics.md
+      - plan/execution/phase-6-errors-diagnostics.md
+      - AIVM.xcodeproj/**
+      - AIVM/**
+      - AIVMTests/**
+      - AIVMUITests/**
+      - scripts/audit_diagnostics_privacy.rb
+      - scripts/audit_localizations.rb
+    checks:
+      required:
+        - id: contract-lint
+          command: ruby scripts/planctl lint-contracts --phase phase-6-errors-diagnostics
+          timeout_seconds: 60
+        - id: diagnostics-privacy-audit
+          command: ruby scripts/audit_diagnostics_privacy.rb
+          timeout_seconds: 120
+        - id: localization-audit
+          command: ruby scripts/audit_localizations.rb
+          timeout_seconds: 120
+        - id: macos-build-test
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' build test"
+          timeout_seconds: 1800
+  - id: phase-7-release-validation
+    title: Release validation and operator handoff
+    plan_file: plan/phases/phase-7-release-validation.md
+    execution_file: plan/execution/phase-7-release-validation.md
+    required_context:
+      - plan/common.md
+      - plan/phases/phase-7-release-validation.md
+      - plan/execution/phase-7-release-validation.md
+    depends_on:
+      - phase-6-errors-diagnostics
+    allowed_paths:
+      - plan/phases/phase-7-release-validation.md
+      - plan/execution/phase-7-release-validation.md
+      - AIVM.xcodeproj/**
+      - AIVM/**
+      - AIVMTests/**
+      - AIVMUITests/**
+      - README.md
+      - docs/**
+      - scripts/audit_release_readiness.rb
+      - scripts/audit_localizations.rb
+    checks:
+      required:
+        - id: contract-lint
+          command: ruby scripts/planctl lint-contracts --phase phase-7-release-validation
+          timeout_seconds: 60
+        - id: release-readiness-audit
+          command: ruby scripts/audit_release_readiness.rb
+          timeout_seconds: 180
+        - id: localization-audit
+          command: ruby scripts/audit_localizations.rb
+          timeout_seconds: 120
+        - id: macos-build-test
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' build test"
+          timeout_seconds: 1800
+      optional:
+        - id: ui-smoke
+          command: "xcodebuild -scheme AIVM -destination 'platform=macOS' -only-testing:AIVMUITests test"
+          timeout_seconds: 1800

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0BE34E0AF8985431D253DD41 /* VMBundleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31471A84C20424D08549560F /* VMBundleStore.swift */; };
 		11BB8CA36CB8466EBBE5A02C /* LocalizationKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D49E6EB51C6A79589D50AFE /* LocalizationKey.swift */; };
+		2E881D614DB242B82B661C30 /* VMConfigurationBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22690AC896CFADBDD4A526E /* VMConfigurationBuilder.swift */; };
 		409850CEA92DDEDC85DC5459 /* AdmissionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 284E3663C5669AAAC66D943F /* AdmissionPolicy.swift */; };
 		513BF9A2054D896730050384 /* VMHomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F362B8EF8EAACA779366FF63 /* VMHomeViewModel.swift */; };
 		5AB7E787D41629E296175E9A /* AIVMUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07848047AF71CDCB867FCA6 /* AIVMUITests.swift */; };
@@ -17,6 +18,7 @@
 		87E35979E1D4917947D920D6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2E2A8B9CF9C641730D449071 /* Localizable.strings */; };
 		8A3F2B2EC19C2921B3DB8A63 /* AIVMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D38B917AD698ACA2FBA7B4 /* AIVMApp.swift */; };
 		9364ED500CA9849FC86AC316 /* VMMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88CD785D70BEDEF069B87C6B /* VMMetadata.swift */; };
+		A0BCBBB970595DF1CCA80801 /* VirtualizationConfigurationBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 144DF56AD019BDAA1A5FDB72 /* VirtualizationConfigurationBuilderTests.swift */; };
 		CA2683B089C4590A87F69C3E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58075FC3E959B92C4B18CBDB /* RootView.swift */; };
 		DE6354ECC1F23A1DFD031298 /* VMBundleStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E756EDD5E3B83FF5D15B994E /* VMBundleStoreTests.swift */; };
 /* End PBXBuildFile section */
@@ -39,6 +41,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		144DF56AD019BDAA1A5FDB72 /* VirtualizationConfigurationBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualizationConfigurationBuilderTests.swift; sourceTree = "<group>"; };
 		253B371CF0CBD88F4822D3D8 /* AIVM.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AIVM.entitlements; sourceTree = "<group>"; };
 		284E3663C5669AAAC66D943F /* AdmissionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdmissionPolicy.swift; sourceTree = "<group>"; };
 		2D49E6EB51C6A79589D50AFE /* LocalizationKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKey.swift; sourceTree = "<group>"; };
@@ -54,6 +57,7 @@
 		936F3003D6C8052052F05AC0 /* LocalizationKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKeyTests.swift; sourceTree = "<group>"; };
 		A07848047AF71CDCB867FCA6 /* AIVMUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIVMUITests.swift; sourceTree = "<group>"; };
 		C4F3CBF38A88C7A86457652F /* AdmissionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdmissionPolicyTests.swift; sourceTree = "<group>"; };
+		E22690AC896CFADBDD4A526E /* VMConfigurationBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMConfigurationBuilder.swift; sourceTree = "<group>"; };
 		E756EDD5E3B83FF5D15B994E /* VMBundleStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMBundleStoreTests.swift; sourceTree = "<group>"; };
 		F362B8EF8EAACA779366FF63 /* VMHomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMHomeViewModel.swift; sourceTree = "<group>"; };
 		FE92C5D213D05B431847378C /* AIVMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIVMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -92,6 +96,7 @@
 			children = (
 				C4F3CBF38A88C7A86457652F /* AdmissionPolicyTests.swift */,
 				936F3003D6C8052052F05AC0 /* LocalizationKeyTests.swift */,
+				144DF56AD019BDAA1A5FDB72 /* VirtualizationConfigurationBuilderTests.swift */,
 				E756EDD5E3B83FF5D15B994E /* VMBundleStoreTests.swift */,
 			);
 			path = AIVMTests;
@@ -107,6 +112,7 @@
 				2D49E6EB51C6A79589D50AFE /* LocalizationKey.swift */,
 				58075FC3E959B92C4B18CBDB /* RootView.swift */,
 				31471A84C20424D08549560F /* VMBundleStore.swift */,
+				E22690AC896CFADBDD4A526E /* VMConfigurationBuilder.swift */,
 				F362B8EF8EAACA779366FF63 /* VMHomeViewModel.swift */,
 				88CD785D70BEDEF069B87C6B /* VMMetadata.swift */,
 				0BDEE988B3CE8D272752F30D /* Resources */,
@@ -250,6 +256,7 @@
 				11BB8CA36CB8466EBBE5A02C /* LocalizationKey.swift in Sources */,
 				CA2683B089C4590A87F69C3E /* RootView.swift in Sources */,
 				0BE34E0AF8985431D253DD41 /* VMBundleStore.swift in Sources */,
+				2E881D614DB242B82B661C30 /* VMConfigurationBuilder.swift in Sources */,
 				513BF9A2054D896730050384 /* VMHomeViewModel.swift in Sources */,
 				9364ED500CA9849FC86AC316 /* VMMetadata.swift in Sources */,
 			);
@@ -262,6 +269,7 @@
 				770CEAECA353AE47CA31CCA0 /* AdmissionPolicyTests.swift in Sources */,
 				7B3898BF93C88F7BBB4CAC5F /* LocalizationKeyTests.swift in Sources */,
 				DE6354ECC1F23A1DFD031298 /* VMBundleStoreTests.swift in Sources */,
+				A0BCBBB970595DF1CCA80801 /* VirtualizationConfigurationBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -4,6 +4,7 @@ completed_phases:
 - phase-0-app-shell-i18n
 - phase-1-vm-model-persistence
 - phase-2-admission-policy
+- phase-3-vz-configuration
 completion_log:
 - phase_id: phase-0-app-shell-i18n
   completed_at: '2026-05-01T12:40:35Z'
@@ -495,5 +496,136 @@ completion_log:
       0.867 sec, +0.867 sec -- end\n\nTest session results, code coverage, and logs:\n\t/Users/cyberserval/github/AIVM/DerivedData/AIVM/Logs/Test/Run-AIVM-2026.05.01_20-53-46-+0800.xcresult\n\n**
       TEST SUCCEEDED **\n\nTesting started"
     required: true
-updated_at: '2026-05-01T12:53:49Z'
+- phase_id: phase-3-vz-configuration
+  completed_at: '2026-05-01T13:04:19Z'
+  summary: Added a production VZ configuration builder with persistent runtime artifacts,
+    NAT device graph, view-model readiness wiring, audit coverage, and tests.
+  next_focus: Promote phase-4 lifecycle state contracts, then implement VM lifecycle
+    orchestration on top of the validated configuration builder.
+  checks:
+  - id: contract-lint
+    command: ruby scripts/planctl lint-contracts --phase phase-3-vz-configuration
+    exit_code: 0
+    duration_seconds: 0.002
+    status: passed
+    output_tail: |-
+      === Phase-Contract Contract Lint ===
+      Phase: phase-3-vz-configuration Virtualization configuration builder
+      ok: contract passes lint
+    required: true
+  - id: contract-lint
+    command: ruby scripts/planctl lint-contracts --phase phase-3-vz-configuration
+    exit_code: 0
+    duration_seconds: 0.102
+    status: passed
+    output_tail: |-
+      === Phase-Contract Contract Lint ===
+      Phase: phase-3-vz-configuration Virtualization configuration builder
+      - ok: contract passes lint
+    required: true
+  - id: virtualization-config-audit
+    command: ruby scripts/audit_virtualization_config.rb
+    exit_code: 0
+    duration_seconds: 0.064
+    status: passed
+    output_tail: "[virtualization-config-audit] ok: VZ configuration builder, artifacts,
+      NAT wiring, and tests found"
+    required: true
+  - id: macos-build-test
+    command: xcodebuild -scheme AIVM -destination 'platform=macOS' build test
+    exit_code: 0
+    duration_seconds: 3.078
+    status: passed
+    output_tail: "cd /Users/cyberserval/github/AIVM\n    builtin-swiftStdLibTool --copy
+      --verbose --scan-executable /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/MacOS/AIVMTests
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/Frameworks
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/PlugIns
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/Library/SystemExtensions
+      --scan-folder /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/Extensions
+      --platform macosx --toolchain /Applications/Xcode15.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain
+      --destination /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Products/Debug/AIVM.app/Contents/PlugIns/AIVMTests.xctest/Contents/Frameworks
+      --strip-bitcode --scan-executable /Applications/Xcode15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib
+      --strip-bitcode-tool /Applications/Xcode15.4.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip
+      --emit-dependency-info /Users/cyberserval/github/AIVM/DerivedData/AIVM/Build/Intermediates.noindex/AIVM.build/Debug/AIVMTests.build/SwiftStdLibToolInputDependencies.dep
+      --filter-for-swift-os\nIgnoring --strip-bitcode because --sign was not passed\n\n2026-05-01
+      21:04:18.459483+0800 AIVM[12742:7709730] ApplePersistenceIgnoreState: Existing
+      state will not be touched. New state will be written to /var/folders/k_/x_tlzg1j3670xs7tzb_nmlq40000gn/T/pro.nanzhi.AIVM.savedState\nTest
+      Suite 'All tests' started at 2026-05-01 21:04:18.729.\nTest Suite 'AIVMTests.xctest'
+      started at 2026-05-01 21:04:18.729.\nTest Suite 'AdmissionPolicyTests' started
+      at 2026-05-01 21:04:18.729.\nTest Case '-[AIVMTests.AdmissionPolicyTests testAMD64ISOBlocksOnAppleSilicon]'
+      started.\nTest Case '-[AIVMTests.AdmissionPolicyTests testAMD64ISOBlocksOnAppleSilicon]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.AdmissionPolicyTests testInsufficientDiskSpaceBlocks]'
+      started.\nTest Case '-[AIVMTests.AdmissionPolicyTests testInsufficientDiskSpaceBlocks]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.AdmissionPolicyTests testLowResourcesAreBlocked]'
+      started.\nTest Case '-[AIVMTests.AdmissionPolicyTests testLowResourcesAreBlocked]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.AdmissionPolicyTests testOlderMacOSBlocksHostOnlyAdmission]'
+      started.\nTest Case '-[AIVMTests.AdmissionPolicyTests testOlderMacOSBlocksHostOnlyAdmission]'
+      passed (0.000 seconds).\nTest Case '-[AIVMTests.AdmissionPolicyTests testRootViewModelReflectsHostOnlyAdmission]'
+      started.\nTest Case '-[AIVMTests.AdmissionPolicyTests testRootViewModelReflectsHostOnlyAdmission]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.AdmissionPolicyTests testSupportedUbuntuARM64RequestIsAllowed]'
+      started.\nTest Case '-[AIVMTests.AdmissionPolicyTests testSupportedUbuntuARM64RequestIsAllowed]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.AdmissionPolicyTests testUnknownARM64DistributionWarnsButAllows]'
+      started.\nTest Case '-[AIVMTests.AdmissionPolicyTests testUnknownARM64DistributionWarnsButAllows]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.AdmissionPolicyTests testUnsupportedHostArchitectureBlocksHostOnlyAdmission]'
+      started.\nTest Case '-[AIVMTests.AdmissionPolicyTests testUnsupportedHostArchitectureBlocksHostOnlyAdmission]'
+      passed (0.000 seconds).\nTest Suite 'AdmissionPolicyTests' passed at 2026-05-01
+      21:04:18.737.\n\t Executed 8 tests, with 0 failures (0 unexpected) in 0.006
+      (0.008) seconds\nTest Suite 'LocalizationKeyTests' started at 2026-05-01 21:04:18.737.\nTest
+      Case '-[AIVMTests.LocalizationKeyTests testLocalizationKeysAreUnique]' started.\nTest
+      Case '-[AIVMTests.LocalizationKeyTests testLocalizationKeysAreUnique]' passed
+      (0.001 seconds).\nTest Case '-[AIVMTests.LocalizationKeyTests testRequiredLocalesResolveEveryKey]'
+      started.\nTest Case '-[AIVMTests.LocalizationKeyTests testRequiredLocalesResolveEveryKey]'
+      passed (0.002 seconds).\nTest Suite 'LocalizationKeyTests' passed at 2026-05-01
+      21:04:18.740.\n\t Executed 2 tests, with 0 failures (0 unexpected) in 0.003
+      (0.003) seconds\nTest Suite 'VMBundleStoreTests' started at 2026-05-01 21:04:18.740.\nTest
+      Case '-[AIVMTests.VMBundleStoreTests testBundleLayoutUsesStableNames]' started.\nTest
+      Case '-[AIVMTests.VMBundleStoreTests testBundleLayoutUsesStableNames]' passed
+      (0.000 seconds).\nTest Case '-[AIVMTests.VMBundleStoreTests testCreateLoadListUpdateAndDeleteBundle]'
+      started.\nTest Case '-[AIVMTests.VMBundleStoreTests testCreateLoadListUpdateAndDeleteBundle]'
+      passed (0.004 seconds).\nTest Case '-[AIVMTests.VMBundleStoreTests testMetadataRoundTripsThroughJSON]'
+      started.\nTest Case '-[AIVMTests.VMBundleStoreTests testMetadataRoundTripsThroughJSON]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.VMBundleStoreTests testStateLocalizationKeysCoverEveryState]'
+      started.\nTest Case '-[AIVMTests.VMBundleStoreTests testStateLocalizationKeysCoverEveryState]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.VMBundleStoreTests testUnsupportedSchemaIsRejected]'
+      started.\nTest Case '-[AIVMTests.VMBundleStoreTests testUnsupportedSchemaIsRejected]'
+      passed (0.001 seconds).\nTest Suite 'VMBundleStoreTests' passed at 2026-05-01
+      21:04:18.748.\n\t Executed 5 tests, with 0 failures (0 unexpected) in 0.007
+      (0.007) seconds\nTest Suite 'VirtualizationConfigurationBuilderTests' started
+      at 2026-05-01 21:04:18.748.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testConfigurationValidateIsCalledWhenEntitlementIsAvailable]' started.\n/Users/cyberserval/github/AIVM/AIVMTests/VirtualizationConfigurationBuilderTests.swift:59:
+      -[AIVMTests.VirtualizationConfigurationBuilderTests testConfigurationValidateIsCalledWhenEntitlementIsAvailable]
+      : Test skipped - Unsigned test host does not expose the virtualization entitlement
+      to VZ validate.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testConfigurationValidateIsCalledWhenEntitlementIsAvailable]' skipped (0.033
+      seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests testCorruptMachineIdentifierIsRejected]'
+      started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests testCorruptMachineIdentifierIsRejected]'
+      passed (0.079 seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testDiskBootOmitsInstallMediaAttachment]' started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testDiskBootOmitsInstallMediaAttachment]' passed (0.003 seconds).\nTest Case
+      '-[AIVMTests.VirtualizationConfigurationBuilderTests testInstallConfigurationCreatesValidatedDeviceGraphAndArtifacts]'
+      started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests testInstallConfigurationCreatesValidatedDeviceGraphAndArtifacts]'
+      passed (0.068 seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testMissingInstallMediaIsRejected]' started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testMissingInstallMediaIsRejected]' passed (0.002 seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testRepeatedBuildsReuseMachineIdentifier]' started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testRepeatedBuildsReuseMachineIdentifier]' passed (0.068 seconds).\nTest Case
+      '-[AIVMTests.VirtualizationConfigurationBuilderTests testViewModelRecordsFailedConfigurationReadiness]'
+      started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests testViewModelRecordsFailedConfigurationReadiness]'
+      passed (0.002 seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testViewModelRecordsReadyConfigurationReadiness]' started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testViewModelRecordsReadyConfigurationReadiness]' passed (0.002 seconds).\nTest
+      Suite 'VirtualizationConfigurationBuilderTests' passed at 2026-05-01 21:04:19.005.\n\t
+      Executed 8 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.256
+      (0.257) seconds\nTest Suite 'AIVMTests.xctest' passed at 2026-05-01 21:04:19.005.\n\t
+      Executed 23 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.272
+      (0.276) seconds\nTest Suite 'All tests' passed at 2026-05-01 21:04:19.006.\n\t
+      Executed 23 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.272
+      (0.277) seconds\n2026-05-01 21:04:19.274 xcodebuild[12698:7709552] [MT] IDETestOperationsObserverDebug:
+      1.151 elapsed -- Testing started completed.\n2026-05-01 21:04:19.274 xcodebuild[12698:7709552]
+      [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start\n2026-05-01
+      21:04:19.274 xcodebuild[12698:7709552] [MT] IDETestOperationsObserverDebug:
+      1.151 sec, +1.151 sec -- end\n\nTest session results, code coverage, and logs:\n\t/Users/cyberserval/github/AIVM/DerivedData/AIVM/Logs/Test/Run-AIVM-2026.05.01_21-04-17-+0800.xcresult\n\n**
+      TEST SUCCEEDED **\n\nTesting started"
+    required: true
+updated_at: '2026-05-01T13:04:19Z'
 finalized_at: 

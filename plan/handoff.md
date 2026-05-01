@@ -6,29 +6,29 @@
 
 - State file: `plan/state.yaml`
 - Handoff file: `plan/handoff.md`
-- Updated at: `2026-05-01T12:53:49Z`
-- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence, phase-2-admission-policy`
+- Updated at: `2026-05-01T13:04:19Z`
+- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence, phase-2-admission-policy, phase-3-vz-configuration`
 
 ## 最近完成
 
-- `phase-0-app-shell-i18n` Native app shell and i18n copy foundation: Created the macOS app shell, entitlement, three-language localization baseline, tests, and Phase-Contract initial milestone.
-- next focus: Promote phase-1 VM model and bundle persistence contracts, then implement persistent VM metadata and bundle storage.
 - `phase-1-vm-model-persistence` VM model and bundle persistence: Added VM metadata, bundle layout/store persistence, root shell loading, schema audit, and tests.
 - next focus: Promote phase-2 host admission and resource policy contracts, then implement host/ISO/resource validation.
 - `phase-2-admission-policy` Host admission and resource policy: Added host, ISO, and resource admission policy with root create gating, audit coverage, and tests.
 - next focus: Promote phase-3 Virtualization configuration builder contracts, then implement validated VZ configuration construction without starting the VM.
+- `phase-3-vz-configuration` Virtualization configuration builder: Added a production VZ configuration builder with persistent runtime artifacts, NAT device graph, view-model readiness wiring, audit coverage, and tests.
+- next focus: Promote phase-4 lifecycle state contracts, then implement VM lifecycle orchestration on top of the validated configuration builder.
 
 ## 下一 Phase
 
-- `phase-3-vz-configuration` Virtualization configuration builder
-- plan: `plan/phases/phase-3-vz-configuration.md`
-- execution: `plan/execution/phase-3-vz-configuration.md`
-- status: `placeholder contracts need upgrade first (plan/phases/phase-3-vz-configuration.md, plan/execution/phase-3-vz-configuration.md)`
+- `phase-4-lifecycle-state` VM lifecycle and state machine
+- plan: `plan/phases/phase-4-lifecycle-state.md`
+- execution: `plan/execution/phase-4-lifecycle-state.md`
+- status: `placeholder contracts need upgrade first (plan/phases/phase-4-lifecycle-state.md, plan/execution/phase-4-lifecycle-state.md)`
 
 下一步读取顺序：
 1. `plan/common.md`
-2. `plan/phases/phase-3-vz-configuration.md`
-3. `plan/execution/phase-3-vz-configuration.md`
+2. `plan/phases/phase-4-lifecycle-state.md`
+3. `plan/execution/phase-4-lifecycle-state.md`
 
 ## 压缩恢复顺序
 

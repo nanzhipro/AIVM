@@ -82,7 +82,7 @@
 1. resolver 报告依赖未满足。
 2. resolver 报告上下文文件缺失。
 3. strict 模式因依赖缺失、上下文缺失或其他外部条件未满足而失败。若 strict 只因当前 phase 仍是占位合同而失败，不算 blocker，按第八节先补正式合同。
-3a. 当前项目根不是 git 工作区，且未显式设置 `PHASE_CONTRACT_ALLOW_NON_GIT=1`。此时 `scripts/planctl` 的 `advance` / `next` / `resolve` / `complete` / `handoff` 会以 exit code 3 拒绝运行，必须先让用户补齐 `git init` 基线，不得绕过。
+   3a. 当前项目根不是 git 工作区，且未显式设置 `PHASE_CONTRACT_ALLOW_NON_GIT=1`。此时 `scripts/planctl` 的 `advance` / `next` / `resolve` / `complete` / `handoff` 会以 exit code 3 拒绝运行，必须先让用户补齐 `git init` 基线，不得绕过。
 4. 当前工作树中存在与当前 phase 契约直接冲突、且无法在不破坏用户已有修改的前提下兼容的变更。
 5. 用户请求与当前 manifest 定义的 phase 顺序、边界或完成规则直接冲突，而规划体系本身尚未被更新。
 

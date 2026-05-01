@@ -2,13 +2,13 @@ import SwiftUI
 import Virtualization
 
 struct VirtualMachineConsoleView: NSViewRepresentable {
-    let virtualMachine: VZVirtualMachine?
+  let virtualMachine: VZVirtualMachine?
 
-    func makeNSView(context: Context) -> VZVirtualMachineView {
-        VZVirtualMachineView()
-    }
+  func makeNSView(context: Context) -> VZVirtualMachineView {
+    VZVirtualMachineView()
+  }
 
-    func updateNSView(_ nsView: VZVirtualMachineView, context: Context) {
-        nsView.virtualMachine = virtualMachine
-    }
+  func updateNSView(_ nsView: VZVirtualMachineView, context: Context) {
+    nsView.virtualMachine = virtualMachine
+  }
 }

@@ -45,6 +45,7 @@ struct RootView: View {
                 Label(localized(.createVM), systemImage: "plus")
             }
             .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.canCreateVMOnHost)
             .accessibilityIdentifier(LocalizationKey.createVM.rawValue)
         }
         .padding(.horizontal, 24)

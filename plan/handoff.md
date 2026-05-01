@@ -6,8 +6,8 @@
 
 - State file: `plan/state.yaml`
 - Handoff file: `plan/handoff.md`
-- Updated at: `2026-05-01T12:48:11Z`
-- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence`
+- Updated at: `2026-05-01T12:53:49Z`
+- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence, phase-2-admission-policy`
 
 ## 最近完成
 
@@ -15,18 +15,20 @@
 - next focus: Promote phase-1 VM model and bundle persistence contracts, then implement persistent VM metadata and bundle storage.
 - `phase-1-vm-model-persistence` VM model and bundle persistence: Added VM metadata, bundle layout/store persistence, root shell loading, schema audit, and tests.
 - next focus: Promote phase-2 host admission and resource policy contracts, then implement host/ISO/resource validation.
+- `phase-2-admission-policy` Host admission and resource policy: Added host, ISO, and resource admission policy with root create gating, audit coverage, and tests.
+- next focus: Promote phase-3 Virtualization configuration builder contracts, then implement validated VZ configuration construction without starting the VM.
 
 ## 下一 Phase
 
-- `phase-2-admission-policy` Host admission and resource policy
-- plan: `plan/phases/phase-2-admission-policy.md`
-- execution: `plan/execution/phase-2-admission-policy.md`
-- status: `placeholder contracts need upgrade first (plan/phases/phase-2-admission-policy.md, plan/execution/phase-2-admission-policy.md)`
+- `phase-3-vz-configuration` Virtualization configuration builder
+- plan: `plan/phases/phase-3-vz-configuration.md`
+- execution: `plan/execution/phase-3-vz-configuration.md`
+- status: `placeholder contracts need upgrade first (plan/phases/phase-3-vz-configuration.md, plan/execution/phase-3-vz-configuration.md)`
 
 下一步读取顺序：
 1. `plan/common.md`
-2. `plan/phases/phase-2-admission-policy.md`
-3. `plan/execution/phase-2-admission-policy.md`
+2. `plan/phases/phase-3-vz-configuration.md`
+3. `plan/execution/phase-3-vz-configuration.md`
 
 ## 压缩恢复顺序
 

@@ -19,6 +19,8 @@
 		8A3F2B2EC19C2921B3DB8A63 /* AIVMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D38B917AD698ACA2FBA7B4 /* AIVMApp.swift */; };
 		9364ED500CA9849FC86AC316 /* VMMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88CD785D70BEDEF069B87C6B /* VMMetadata.swift */; };
 		A0BCBBB970595DF1CCA80801 /* VirtualizationConfigurationBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 144DF56AD019BDAA1A5FDB72 /* VirtualizationConfigurationBuilderTests.swift */; };
+		B0110BEDDCD3CA6A3092D70F /* VMLifecycleControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3819F007FAEBCA1408F8C8C8 /* VMLifecycleControllerTests.swift */; };
+		BB4DD8C7C5258568641E5597 /* VMLifecycleController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941674B71D8D5D9D03E9F073 /* VMLifecycleController.swift */; };
 		CA2683B089C4590A87F69C3E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58075FC3E959B92C4B18CBDB /* RootView.swift */; };
 		DE6354ECC1F23A1DFD031298 /* VMBundleStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E756EDD5E3B83FF5D15B994E /* VMBundleStoreTests.swift */; };
 /* End PBXBuildFile section */
@@ -46,6 +48,7 @@
 		284E3663C5669AAAC66D943F /* AdmissionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdmissionPolicy.swift; sourceTree = "<group>"; };
 		2D49E6EB51C6A79589D50AFE /* LocalizationKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKey.swift; sourceTree = "<group>"; };
 		31471A84C20424D08549560F /* VMBundleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMBundleStore.swift; sourceTree = "<group>"; };
+		3819F007FAEBCA1408F8C8C8 /* VMLifecycleControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMLifecycleControllerTests.swift; sourceTree = "<group>"; };
 		38C887BA7ED272E15F6212F9 /* AIVM.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIVM.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3C779DCD13A2EA73A7FA04CE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		58075FC3E959B92C4B18CBDB /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -55,6 +58,7 @@
 		88CD785D70BEDEF069B87C6B /* VMMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMMetadata.swift; sourceTree = "<group>"; };
 		8FA9D756F142709437F536F3 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		936F3003D6C8052052F05AC0 /* LocalizationKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKeyTests.swift; sourceTree = "<group>"; };
+		941674B71D8D5D9D03E9F073 /* VMLifecycleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMLifecycleController.swift; sourceTree = "<group>"; };
 		A07848047AF71CDCB867FCA6 /* AIVMUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIVMUITests.swift; sourceTree = "<group>"; };
 		C4F3CBF38A88C7A86457652F /* AdmissionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdmissionPolicyTests.swift; sourceTree = "<group>"; };
 		E22690AC896CFADBDD4A526E /* VMConfigurationBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMConfigurationBuilder.swift; sourceTree = "<group>"; };
@@ -98,6 +102,7 @@
 				936F3003D6C8052052F05AC0 /* LocalizationKeyTests.swift */,
 				144DF56AD019BDAA1A5FDB72 /* VirtualizationConfigurationBuilderTests.swift */,
 				E756EDD5E3B83FF5D15B994E /* VMBundleStoreTests.swift */,
+				3819F007FAEBCA1408F8C8C8 /* VMLifecycleControllerTests.swift */,
 			);
 			path = AIVMTests;
 			sourceTree = "<group>";
@@ -114,6 +119,7 @@
 				31471A84C20424D08549560F /* VMBundleStore.swift */,
 				E22690AC896CFADBDD4A526E /* VMConfigurationBuilder.swift */,
 				F362B8EF8EAACA779366FF63 /* VMHomeViewModel.swift */,
+				941674B71D8D5D9D03E9F073 /* VMLifecycleController.swift */,
 				88CD785D70BEDEF069B87C6B /* VMMetadata.swift */,
 				0BDEE988B3CE8D272752F30D /* Resources */,
 			);
@@ -258,6 +264,7 @@
 				0BE34E0AF8985431D253DD41 /* VMBundleStore.swift in Sources */,
 				2E881D614DB242B82B661C30 /* VMConfigurationBuilder.swift in Sources */,
 				513BF9A2054D896730050384 /* VMHomeViewModel.swift in Sources */,
+				BB4DD8C7C5258568641E5597 /* VMLifecycleController.swift in Sources */,
 				9364ED500CA9849FC86AC316 /* VMMetadata.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -269,6 +276,7 @@
 				770CEAECA353AE47CA31CCA0 /* AdmissionPolicyTests.swift in Sources */,
 				7B3898BF93C88F7BBB4CAC5F /* LocalizationKeyTests.swift in Sources */,
 				DE6354ECC1F23A1DFD031298 /* VMBundleStoreTests.swift in Sources */,
+				B0110BEDDCD3CA6A3092D70F /* VMLifecycleControllerTests.swift in Sources */,
 				A0BCBBB970595DF1CCA80801 /* VirtualizationConfigurationBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

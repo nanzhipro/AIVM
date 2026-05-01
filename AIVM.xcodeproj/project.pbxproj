@@ -7,12 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0BE34E0AF8985431D253DD41 /* VMBundleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31471A84C20424D08549560F /* VMBundleStore.swift */; };
 		11BB8CA36CB8466EBBE5A02C /* LocalizationKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D49E6EB51C6A79589D50AFE /* LocalizationKey.swift */; };
+		513BF9A2054D896730050384 /* VMHomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F362B8EF8EAACA779366FF63 /* VMHomeViewModel.swift */; };
 		5AB7E787D41629E296175E9A /* AIVMUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A07848047AF71CDCB867FCA6 /* AIVMUITests.swift */; };
 		7B3898BF93C88F7BBB4CAC5F /* LocalizationKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 936F3003D6C8052052F05AC0 /* LocalizationKeyTests.swift */; };
 		87E35979E1D4917947D920D6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2E2A8B9CF9C641730D449071 /* Localizable.strings */; };
 		8A3F2B2EC19C2921B3DB8A63 /* AIVMApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83D38B917AD698ACA2FBA7B4 /* AIVMApp.swift */; };
+		9364ED500CA9849FC86AC316 /* VMMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88CD785D70BEDEF069B87C6B /* VMMetadata.swift */; };
 		CA2683B089C4590A87F69C3E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58075FC3E959B92C4B18CBDB /* RootView.swift */; };
+		DE6354ECC1F23A1DFD031298 /* VMBundleStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E756EDD5E3B83FF5D15B994E /* VMBundleStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -35,15 +39,19 @@
 /* Begin PBXFileReference section */
 		253B371CF0CBD88F4822D3D8 /* AIVM.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AIVM.entitlements; sourceTree = "<group>"; };
 		2D49E6EB51C6A79589D50AFE /* LocalizationKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKey.swift; sourceTree = "<group>"; };
+		31471A84C20424D08549560F /* VMBundleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMBundleStore.swift; sourceTree = "<group>"; };
 		38C887BA7ED272E15F6212F9 /* AIVM.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIVM.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3C779DCD13A2EA73A7FA04CE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		58075FC3E959B92C4B18CBDB /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		6B25F9B09A5BFC7A0B6A9455 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		748FB1039EFC188EB0D8F2EC /* AIVMUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIVMUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		83D38B917AD698ACA2FBA7B4 /* AIVMApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIVMApp.swift; sourceTree = "<group>"; };
+		88CD785D70BEDEF069B87C6B /* VMMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMMetadata.swift; sourceTree = "<group>"; };
 		8FA9D756F142709437F536F3 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		936F3003D6C8052052F05AC0 /* LocalizationKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationKeyTests.swift; sourceTree = "<group>"; };
 		A07848047AF71CDCB867FCA6 /* AIVMUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIVMUITests.swift; sourceTree = "<group>"; };
+		E756EDD5E3B83FF5D15B994E /* VMBundleStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMBundleStoreTests.swift; sourceTree = "<group>"; };
+		F362B8EF8EAACA779366FF63 /* VMHomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VMHomeViewModel.swift; sourceTree = "<group>"; };
 		FE92C5D213D05B431847378C /* AIVMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIVMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF45F588577A9DE5B1E95503 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -79,6 +87,7 @@
 			isa = PBXGroup;
 			children = (
 				936F3003D6C8052052F05AC0 /* LocalizationKeyTests.swift */,
+				E756EDD5E3B83FF5D15B994E /* VMBundleStoreTests.swift */,
 			);
 			path = AIVMTests;
 			sourceTree = "<group>";
@@ -91,6 +100,9 @@
 				3C779DCD13A2EA73A7FA04CE /* Info.plist */,
 				2D49E6EB51C6A79589D50AFE /* LocalizationKey.swift */,
 				58075FC3E959B92C4B18CBDB /* RootView.swift */,
+				31471A84C20424D08549560F /* VMBundleStore.swift */,
+				F362B8EF8EAACA779366FF63 /* VMHomeViewModel.swift */,
+				88CD785D70BEDEF069B87C6B /* VMMetadata.swift */,
 				0BDEE988B3CE8D272752F30D /* Resources */,
 			);
 			path = AIVM;
@@ -230,6 +242,9 @@
 				8A3F2B2EC19C2921B3DB8A63 /* AIVMApp.swift in Sources */,
 				11BB8CA36CB8466EBBE5A02C /* LocalizationKey.swift in Sources */,
 				CA2683B089C4590A87F69C3E /* RootView.swift in Sources */,
+				0BE34E0AF8985431D253DD41 /* VMBundleStore.swift in Sources */,
+				513BF9A2054D896730050384 /* VMHomeViewModel.swift in Sources */,
+				9364ED500CA9849FC86AC316 /* VMMetadata.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -238,6 +253,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7B3898BF93C88F7BBB4CAC5F /* LocalizationKeyTests.swift in Sources */,
+				DE6354ECC1F23A1DFD031298 /* VMBundleStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

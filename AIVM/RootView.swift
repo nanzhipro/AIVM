@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootView: View {
+    @StateObject private var viewModel = VMHomeViewModel()
+
     private let statusKeys: [LocalizationKey] = [
         .notInstalled,
         .installing,
@@ -49,7 +51,16 @@ struct RootView: View {
         .padding(.vertical, 18)
     }
 
+    @ViewBuilder
     private var content: some View {
+        if let metadata = viewModel.metadata {
+            vmSummary(metadata)
+        } else {
+            emptyState
+        }
+    }
+
+    private var emptyState: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top, spacing: 18) {
                 Image(systemName: "desktopcomputer")
@@ -99,6 +110,38 @@ struct RootView: View {
                             .accessibilityIdentifier(key.rawValue)
                     }
                 }
+            }
+
+            Spacer()
+        }
+        .padding(32)
+    }
+
+    private func vmSummary(_ metadata: VMMetadata) -> some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(alignment: .top, spacing: 18) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: 42, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 56, height: 56)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(metadata.displayName)
+                        .font(.title2.weight(.semibold))
+                    Text(localized(metadata.state.localizedKey))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier(metadata.state.localizedKey.rawValue)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                } label: {
+                    Label(localized(.viewLogs), systemImage: "doc.text.magnifyingglass")
+                }
+                .accessibilityIdentifier(LocalizationKey.viewLogs.rawValue)
             }
 
             Spacer()

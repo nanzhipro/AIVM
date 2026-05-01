@@ -6,25 +6,27 @@
 
 - State file: `plan/state.yaml`
 - Handoff file: `plan/handoff.md`
-- Updated at: `2026-05-01T12:40:35Z`
-- Completed phases: `phase-0-app-shell-i18n`
+- Updated at: `2026-05-01T12:48:11Z`
+- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence`
 
 ## 最近完成
 
 - `phase-0-app-shell-i18n` Native app shell and i18n copy foundation: Created the macOS app shell, entitlement, three-language localization baseline, tests, and Phase-Contract initial milestone.
 - next focus: Promote phase-1 VM model and bundle persistence contracts, then implement persistent VM metadata and bundle storage.
+- `phase-1-vm-model-persistence` VM model and bundle persistence: Added VM metadata, bundle layout/store persistence, root shell loading, schema audit, and tests.
+- next focus: Promote phase-2 host admission and resource policy contracts, then implement host/ISO/resource validation.
 
 ## 下一 Phase
 
-- `phase-1-vm-model-persistence` VM model and bundle persistence
-- plan: `plan/phases/phase-1-vm-model-persistence.md`
-- execution: `plan/execution/phase-1-vm-model-persistence.md`
-- status: `placeholder contracts need upgrade first (plan/phases/phase-1-vm-model-persistence.md, plan/execution/phase-1-vm-model-persistence.md)`
+- `phase-2-admission-policy` Host admission and resource policy
+- plan: `plan/phases/phase-2-admission-policy.md`
+- execution: `plan/execution/phase-2-admission-policy.md`
+- status: `placeholder contracts need upgrade first (plan/phases/phase-2-admission-policy.md, plan/execution/phase-2-admission-policy.md)`
 
 下一步读取顺序：
 1. `plan/common.md`
-2. `plan/phases/phase-1-vm-model-persistence.md`
-3. `plan/execution/phase-1-vm-model-persistence.md`
+2. `plan/phases/phase-2-admission-policy.md`
+3. `plan/execution/phase-2-admission-policy.md`
 
 ## 压缩恢复顺序
 

@@ -6,6 +6,7 @@ completed_phases:
 - phase-2-admission-policy
 - phase-3-vz-configuration
 - phase-4-lifecycle-state
+- phase-5-vm-ui
 completion_log:
 - phase_id: phase-0-app-shell-i18n
   completed_at: '2026-05-01T12:40:35Z'
@@ -759,5 +760,156 @@ completion_log:
       1.221 sec, +1.221 sec -- end\n\nTest session results, code coverage, and logs:\n\t/Users/cyberserval/github/AIVM/DerivedData/AIVM/Logs/Test/Run-AIVM-2026.05.01_21-13-29-+0800.xcresult\n\n**
       TEST SUCCEEDED **\n\nTesting started"
     required: true
-updated_at: '2026-05-01T13:13:31Z'
+- phase_id: phase-5-vm-ui
+  completed_at: '2026-05-01T13:28:34Z'
+  summary: Added create/detail/run UI with ISO selection, localized VM details, start/stop/delete
+    controls, VZ console wrapper, and view-model tests.
+  next_focus: Promote phase-6 diagnostics contracts, then add local recovery and diagnostics
+    surfaces without expanding VM scope.
+  checks:
+  - id: contract-lint
+    command: ruby scripts/planctl lint-contracts --phase phase-5-vm-ui
+    exit_code: 0
+    duration_seconds: 0.002
+    status: passed
+    output_tail: |-
+      === Phase-Contract Contract Lint ===
+      Phase: phase-5-vm-ui Create, detail, and VM run UI
+      ok: contract passes lint
+    required: true
+  - id: contract-lint
+    command: ruby scripts/planctl lint-contracts --phase phase-5-vm-ui
+    exit_code: 0
+    duration_seconds: 0.111
+    status: passed
+    output_tail: |-
+      === Phase-Contract Contract Lint ===
+      Phase: phase-5-vm-ui Create, detail, and VM run UI
+      - ok: contract passes lint
+    required: true
+  - id: localization-audit
+    command: ruby scripts/audit_localizations.rb
+    exit_code: 0
+    duration_seconds: 0.084
+    status: passed
+    output_tail: "[localization-audit] ok: en, zh-Hans, ja share 41 keys"
+    required: true
+  - id: macos-build-test
+    command: xcodebuild -scheme AIVM -destination 'platform=macOS' build test
+    exit_code: 0
+    duration_seconds: 6.985
+    status: passed
+    output_tail: "Test Case '-[AIVMTests.VMHomeViewModelUITests testDeleteCurrentVMRemovesBundleMetadata]'
+      started.\n2026-05-01 21:28:30.051338+0800 AIVM[37543:7769984] [VMHome] VM deleted
+      id=6A722F0E-CDAD-46D6-B0C3-B31C1F920F93\nTest Case '-[AIVMTests.VMHomeViewModelUITests
+      testDeleteCurrentVMRemovesBundleMetadata]' passed (0.002 seconds).\nTest Suite
+      'VMHomeViewModelUITests' passed at 2026-05-01 21:28:30.052.\n\t Executed 5 tests,
+      with 0 failures (0 unexpected) in 0.010 (0.011) seconds\nTest Suite 'VMLifecycleControllerTests'
+      started at 2026-05-01 21:28:30.052.\nTest Case '-[AIVMTests.VMLifecycleControllerTests
+      testBuilderFailurePersistsError]' started.\n2026-05-01 21:28:30.053285+0800
+      AIVM[37543:7769984] [VMLifecycle] VM start requested id=0517CFDF-FD77-4E11-99EC-206E6E5AB97B
+      state=Draft\n2026-05-01 21:28:30.054066+0800 AIVM[37543:7769984] [VMLifecycle]
+      VM start failed id=0517CFDF-FD77-4E11-99EC-206E6E5AB97B\nTest Case '-[AIVMTests.VMLifecycleControllerTests
+      testBuilderFailurePersistsError]' passed (0.104 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests
+      testDiskStartPersistsRunning]' started.\n2026-05-01 21:28:30.157999+0800 AIVM[37543:7769984]
+      [VMLifecycle] VM start requested id=1522EF0A-7034-476C-832D-AE9EA03379D6 state=Stopped\n2026-05-01
+      21:28:30.158423+0800 AIVM[37543:7769984] [VMLifecycle] VM start succeeded id=1522EF0A-7034-476C-832D-AE9EA03379D6
+      state=Running\nTest Case '-[AIVMTests.VMLifecycleControllerTests testDiskStartPersistsRunning]'
+      passed (0.105 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testInstallMediaStartPersistsInstalling]'
+      started.\n2026-05-01 21:28:30.266463+0800 AIVM[37543:7769984] [VMLifecycle]
+      VM start requested id=AB51FA5A-8B84-43C2-A6C9-0CC764B18B04 state=Draft\n2026-05-01
+      21:28:30.268117+0800 AIVM[37543:7769984] [VMLifecycle] VM start succeeded id=AB51FA5A-8B84-43C2-A6C9-0CC764B18B04
+      state=Installing\nTest Case '-[AIVMTests.VMLifecycleControllerTests testInstallMediaStartPersistsInstalling]'
+      passed (0.111 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testInvalidStartTransitionDoesNotMutateMetadata]'
+      started.\nTest Case '-[AIVMTests.VMLifecycleControllerTests testInvalidStartTransitionDoesNotMutateMetadata]'
+      passed (0.010 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testStartFailurePersistsError]'
+      started.\n2026-05-01 21:28:30.388915+0800 AIVM[37543:7769984] [VMLifecycle]
+      VM start requested id=C82B817E-DBE9-4A00-A1A9-0D95D1F60CD0 state=Draft\n2026-05-01
+      21:28:30.390905+0800 AIVM[37543:7769984] [VMLifecycle] VM start failed id=C82B817E-DBE9-4A00-A1A9-0D95D1F60CD0\nTest
+      Case '-[AIVMTests.VMLifecycleControllerTests testStartFailurePersistsError]'
+      passed (0.112 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testStateMachineStartAndStopPermissions]'
+      started.\nTest Case '-[AIVMTests.VMLifecycleControllerTests testStateMachineStartAndStopPermissions]'
+      passed (0.002 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testStopFailurePersistsError]'
+      started.\n2026-05-01 21:28:30.504631+0800 AIVM[37543:7769984] [VMLifecycle]
+      VM start requested id=3584F770-A025-420B-A401-AE8F177D31DD state=Stopped\n2026-05-01
+      21:28:30.505446+0800 AIVM[37543:7769984] [VMLifecycle] VM start succeeded id=3584F770-A025-420B-A401-AE8F177D31DD
+      state=Running\n2026-05-01 21:28:30.505469+0800 AIVM[37543:7769984] [VMLifecycle]
+      VM stop requested id=3584F770-A025-420B-A401-AE8F177D31DD state=Running\n2026-05-01
+      21:28:30.506074+0800 AIVM[37543:7769984] [VMLifecycle] VM stop failed id=3584F770-A025-420B-A401-AE8F177D31DD\nTest
+      Case '-[AIVMTests.VMLifecycleControllerTests testStopFailurePersistsError]'
+      passed (0.007 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testStopPersistsStopped]'
+      started.\n2026-05-01 21:28:30.508901+0800 AIVM[37543:7769984] [VMLifecycle]
+      VM start requested id=5766AED6-E3E4-43EF-8C54-D9A81D94E81F state=Stopped\n2026-05-01
+      21:28:30.509456+0800 AIVM[37543:7769984] [VMLifecycle] VM start succeeded id=5766AED6-E3E4-43EF-8C54-D9A81D94E81F
+      state=Running\n2026-05-01 21:28:30.509474+0800 AIVM[37543:7769984] [VMLifecycle]
+      VM stop requested id=5766AED6-E3E4-43EF-8C54-D9A81D94E81F state=Running\n2026-05-01
+      21:28:30.509932+0800 AIVM[37543:7769984] [VMLifecycle] VM stop succeeded id=5766AED6-E3E4-43EF-8C54-D9A81D94E81F\nTest
+      Case '-[AIVMTests.VMLifecycleControllerTests testStopPersistsStopped]' passed
+      (0.106 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testStopWithoutActiveMachineIsRejectedWithoutMutation]'
+      started.\nTest Case '-[AIVMTests.VMLifecycleControllerTests testStopWithoutActiveMachineIsRejectedWithoutMutation]'
+      passed (0.006 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testViewModelStartActionUsesLifecycleController]'
+      started.\nTest Case '-[AIVMTests.VMLifecycleControllerTests testViewModelStartActionUsesLifecycleController]'
+      passed (0.110 seconds).\nTest Case '-[AIVMTests.VMLifecycleControllerTests testViewModelStopActionUsesLifecycleController]'
+      started.\nTest Case '-[AIVMTests.VMLifecycleControllerTests testViewModelStopActionUsesLifecycleController]'
+      passed (0.009 seconds).\nTest Suite 'VMLifecycleControllerTests' passed at 2026-05-01
+      21:28:30.742.\n\t Executed 11 tests, with 0 failures (0 unexpected) in 0.682
+      (0.690) seconds\nTest Suite 'VirtualizationConfigurationBuilderTests' started
+      at 2026-05-01 21:28:30.743.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testConfigurationValidateIsCalledWhenEntitlementIsAvailable]' started.\n/Users/cyberserval/github/AIVM/AIVMTests/VirtualizationConfigurationBuilderTests.swift:59:
+      -[AIVMTests.VirtualizationConfigurationBuilderTests testConfigurationValidateIsCalledWhenEntitlementIsAvailable]
+      : Test skipped - Unsigned test host does not expose the virtualization entitlement
+      to VZ validate.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testConfigurationValidateIsCalledWhenEntitlementIsAvailable]' skipped (0.140
+      seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests testCorruptMachineIdentifierIsRejected]'
+      started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests testCorruptMachineIdentifierIsRejected]'
+      passed (0.070 seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testDiskBootOmitsInstallMediaAttachment]' started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testDiskBootOmitsInstallMediaAttachment]' passed (0.003 seconds).\nTest Case
+      '-[AIVMTests.VirtualizationConfigurationBuilderTests testInstallConfigurationCreatesValidatedDeviceGraphAndArtifacts]'
+      started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests testInstallConfigurationCreatesValidatedDeviceGraphAndArtifacts]'
+      passed (0.067 seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testMissingInstallMediaIsRejected]' started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testMissingInstallMediaIsRejected]' passed (0.002 seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testRepeatedBuildsReuseMachineIdentifier]' started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testRepeatedBuildsReuseMachineIdentifier]' passed (0.067 seconds).\nTest Case
+      '-[AIVMTests.VirtualizationConfigurationBuilderTests testViewModelRecordsFailedConfigurationReadiness]'
+      started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests testViewModelRecordsFailedConfigurationReadiness]'
+      passed (0.001 seconds).\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testViewModelRecordsReadyConfigurationReadiness]' started.\nTest Case '-[AIVMTests.VirtualizationConfigurationBuilderTests
+      testViewModelRecordsReadyConfigurationReadiness]' passed (0.002 seconds).\nTest
+      Suite 'VirtualizationConfigurationBuilderTests' passed at 2026-05-01 21:28:31.097.\n\t
+      Executed 8 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.353
+      (0.355) seconds\nTest Suite 'AIVMTests.xctest' passed at 2026-05-01 21:28:31.098.\n\t
+      Executed 39 tests, with 1 test skipped and 0 failures (0 unexpected) in 1.062
+      (1.076) seconds\nTest Suite 'All tests' passed at 2026-05-01 21:28:31.098.\n\t
+      Executed 39 tests, with 1 test skipped and 0 failures (0 unexpected) in 1.062
+      (1.077) seconds\n2026-05-01 21:28:31.403 xcodebuild[37492:7769765] [MT] IDETestOperationsObserverDebug:
+      3.989 elapsed -- Testing started completed.\n2026-05-01 21:28:31.403 xcodebuild[37492:7769765]
+      [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start\n2026-05-01
+      21:28:31.404 xcodebuild[37492:7769765] [MT] IDETestOperationsObserverDebug:
+      3.989 sec, +3.989 sec -- end\n\nTest session results, code coverage, and logs:\n\t/Users/cyberserval/github/AIVM/DerivedData/AIVM/Logs/Test/Run-AIVM-2026.05.01_21-28-26-+0800.xcresult\n\n**
+      TEST SUCCEEDED **\n\nTesting started"
+    required: true
+  - id: ui-smoke
+    command: xcodebuild -scheme AIVM -destination 'platform=macOS' -only-testing:AIVMUITests
+      test
+    exit_code: 70
+    duration_seconds: 2.428
+    status: failed
+    output_tail: |-
+      Command line invocation:
+          /Applications/Xcode15.4.app/Contents/Developer/usr/bin/xcodebuild -scheme AIVM -destination platform=macOS "-only-testing:AIVMUITests" test
+
+      User defaults from command line:
+          IDEPackageSupportUseBuiltinSCM = YES
+
+      --- xcodebuild: WARNING: Using the first of multiple matching destinations:
+      { platform:macOS, arch:arm64, id:00006000-000604A00A23401E, name:My Mac }
+      { platform:macOS, arch:x86_64, id:00006000-000604A00A23401E, name:My Mac }
+      2026-05-01 21:28:33.104 xcodebuild[37614:7770696] Writing error result bundle to /var/folders/k_/x_tlzg1j3670xs7tzb_nmlq40000gn/T/ResultBundle_2026-01-05_21-28-0033.xcresult
+      Prepare packages
+
+      xcodebuild: error: Failed to build project AIVM with scheme AIVM.: Tests in the target “AIVMUITests” can’t be run because “AIVMUITests” isn’t a member of the specified test plan or scheme.
+    required: false
+updated_at: '2026-05-01T13:28:34Z'
 finalized_at: 

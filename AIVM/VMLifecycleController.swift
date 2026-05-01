@@ -35,6 +35,8 @@ struct VMStateMachine {
 
 @MainActor
 protocol VMLifecycleControlling {
+    var displayVirtualMachine: VZVirtualMachine? { get }
+
     func start(metadata: VMMetadata) async throws -> VMMetadata
     func stop(metadata: VMMetadata) async throws -> VMMetadata
 }
@@ -44,6 +46,8 @@ protocol VirtualMachineOperating: AnyObject {
     var state: VZVirtualMachine.State { get }
     var canStart: Bool { get }
     var canStop: Bool { get }
+    var displayVirtualMachine: VZVirtualMachine? { get }
+
     func start() async throws
     func stop() async throws
 }
@@ -66,6 +70,10 @@ final class VZVirtualMachineAdapter: VirtualMachineOperating {
 
     var canStop: Bool {
         virtualMachine.canStop
+    }
+
+    var displayVirtualMachine: VZVirtualMachine? {
+        virtualMachine
     }
 
     func start() async throws {
@@ -94,6 +102,10 @@ final class VMLifecycleController: VMLifecycleControlling {
     private let makeVirtualMachine: VirtualMachineFactory
     private let logger: Logger
     private var activeMachine: VirtualMachineOperating?
+
+    var displayVirtualMachine: VZVirtualMachine? {
+        activeMachine?.displayVirtualMachine
+    }
 
     init(
         store: VMBundleStore,

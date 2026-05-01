@@ -6,29 +6,29 @@
 
 - State file: `plan/state.yaml`
 - Handoff file: `plan/handoff.md`
-- Updated at: `2026-05-01T13:13:31Z`
-- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence, phase-2-admission-policy, phase-3-vz-configuration, phase-4-lifecycle-state`
+- Updated at: `2026-05-01T13:28:34Z`
+- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence, phase-2-admission-policy, phase-3-vz-configuration, phase-4-lifecycle-state, phase-5-vm-ui`
 
 ## 最近完成
 
-- `phase-2-admission-policy` Host admission and resource policy: Added host, ISO, and resource admission policy with root create gating, audit coverage, and tests.
-- next focus: Promote phase-3 Virtualization configuration builder contracts, then implement validated VZ configuration construction without starting the VM.
 - `phase-3-vz-configuration` Virtualization configuration builder: Added a production VZ configuration builder with persistent runtime artifacts, NAT device graph, view-model readiness wiring, audit coverage, and tests.
 - next focus: Promote phase-4 lifecycle state contracts, then implement VM lifecycle orchestration on top of the validated configuration builder.
 - `phase-4-lifecycle-state` VM lifecycle and state machine: Added VM lifecycle state machine, Virtualization-backed lifecycle controller, view-model start/stop actions, audit coverage, and fake-VM tests.
 - next focus: Promote phase-5 create/detail/run UI contracts, then wire user-facing controls to lifecycle and persistence surfaces.
+- `phase-5-vm-ui` Create, detail, and VM run UI: Added create/detail/run UI with ISO selection, localized VM details, start/stop/delete controls, VZ console wrapper, and view-model tests.
+- next focus: Promote phase-6 diagnostics contracts, then add local recovery and diagnostics surfaces without expanding VM scope.
 
 ## 下一 Phase
 
-- `phase-5-vm-ui` Create, detail, and VM run UI
-- plan: `plan/phases/phase-5-vm-ui.md`
-- execution: `plan/execution/phase-5-vm-ui.md`
-- status: `placeholder contracts need upgrade first (plan/phases/phase-5-vm-ui.md, plan/execution/phase-5-vm-ui.md)`
+- `phase-6-errors-diagnostics` Error recovery and local diagnostics
+- plan: `plan/phases/phase-6-errors-diagnostics.md`
+- execution: `plan/execution/phase-6-errors-diagnostics.md`
+- status: `placeholder contracts need upgrade first (plan/phases/phase-6-errors-diagnostics.md, plan/execution/phase-6-errors-diagnostics.md)`
 
 下一步读取顺序：
 1. `plan/common.md`
-2. `plan/phases/phase-5-vm-ui.md`
-3. `plan/execution/phase-5-vm-ui.md`
+2. `plan/phases/phase-6-errors-diagnostics.md`
+3. `plan/execution/phase-6-errors-diagnostics.md`
 
 ## 压缩恢复顺序
 

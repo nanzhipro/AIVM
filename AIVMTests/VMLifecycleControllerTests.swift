@@ -279,6 +279,7 @@ private final class FakeVirtualMachine: VirtualMachineOperating {
     var state: VZVirtualMachine.State = .stopped
     var canStart: Bool
     var canStop: Bool
+    var displayVirtualMachine: VZVirtualMachine? { nil }
     private let startError: Error?
     private let stopError: Error?
     private(set) var startCallCount = 0
@@ -324,6 +325,7 @@ private final class FakeConfigurationBuilder: VMConfigurationBuilding {
 private final class FakeLifecycleController: VMLifecycleControlling {
     private let startState: VMState
     private let stopState: VMState
+    var displayVirtualMachine: VZVirtualMachine? { nil }
     private(set) var startCallCount = 0
     private(set) var stopCallCount = 0
 

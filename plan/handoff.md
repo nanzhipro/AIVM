@@ -6,29 +6,21 @@
 
 - State file: `plan/state.yaml`
 - Handoff file: `plan/handoff.md`
-- Updated at: `2026-05-01T13:36:03Z`
-- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence, phase-2-admission-policy, phase-3-vz-configuration, phase-4-lifecycle-state, phase-5-vm-ui, phase-6-errors-diagnostics`
+- Updated at: `2026-05-01T13:45:34Z`
+- Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence, phase-2-admission-policy, phase-3-vz-configuration, phase-4-lifecycle-state, phase-5-vm-ui, phase-6-errors-diagnostics, phase-7-release-validation`
 
 ## 最近完成
 
-- `phase-4-lifecycle-state` VM lifecycle and state machine: Added VM lifecycle state machine, Virtualization-backed lifecycle controller, view-model start/stop actions, audit coverage, and fake-VM tests.
-- next focus: Promote phase-5 create/detail/run UI contracts, then wire user-facing controls to lifecycle and persistence surfaces.
 - `phase-5-vm-ui` Create, detail, and VM run UI: Added create/detail/run UI with ISO selection, localized VM details, start/stop/delete controls, VZ console wrapper, and view-model tests.
 - next focus: Promote phase-6 diagnostics contracts, then add local recovery and diagnostics surfaces without expanding VM scope.
 - `phase-6-errors-diagnostics` Error recovery and local diagnostics: Added local diagnostics snapshots, log-directory opening, ISO recovery, recovery UI actions, privacy audit, and tests.
 - next focus: Promote phase-7 release validation contracts, then document release readiness and final operator handoff.
+- `phase-7-release-validation` Release validation and operator handoff: Added release readiness documentation, README handoff link, release readiness audit, and final validation evidence.
+- next focus: Run finalization, inspect the final ledger, and return release decisions to the human operator.
 
 ## 下一 Phase
 
-- `phase-7-release-validation` Release validation and operator handoff
-- plan: `plan/phases/phase-7-release-validation.md`
-- execution: `plan/execution/phase-7-release-validation.md`
-- status: `placeholder contracts need upgrade first (plan/phases/phase-7-release-validation.md, plan/execution/phase-7-release-validation.md)`
-
-下一步读取顺序：
-1. `plan/common.md`
-2. `plan/phases/phase-7-release-validation.md`
-3. `plan/execution/phase-7-release-validation.md`
+- none
 
 ## 压缩恢复顺序
 

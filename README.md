@@ -13,3 +13,5 @@ xcodebuild -scheme AIVM -destination 'platform=macOS' build test
 ```
 
 Long-running implementation is governed by [plan/manifest.yaml](plan/manifest.yaml) and [plan/workflow.md](plan/workflow.md).
+
+Release readiness and operator handoff details live in [docs/release-readiness.md](docs/release-readiness.md).

@@ -6,7 +6,8 @@
 
 - State file: `plan/state.yaml`
 - Handoff file: `plan/handoff.md`
-- Updated at: `2026-05-01T13:45:34Z`
+- Updated at: `2026-05-01T13:46:00Z`
+- Finalized at: `2026-05-01T13:46:00Z`
 - Completed phases: `phase-0-app-shell-i18n, phase-1-vm-model-persistence, phase-2-admission-policy, phase-3-vz-configuration, phase-4-lifecycle-state, phase-5-vm-ui, phase-6-errors-diagnostics, phase-7-release-validation`
 
 ## 最近完成

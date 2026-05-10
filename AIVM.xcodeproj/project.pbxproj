@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -231,7 +231,6 @@
 			);
 			mainGroup = E4F459EDD9033A4587BC9DB2;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 60;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -413,7 +412,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = pro.nanzhi.AIVM;
+				PRODUCT_BUNDLE_IDENTIFIER = pro.nanzhi.AIVM0;
 				PRODUCT_NAME = AIVM;
 				SDKROOT = macosx;
 			};
@@ -517,7 +516,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				PRODUCT_BUNDLE_IDENTIFIER = pro.nanzhi.AIVM;
+				PRODUCT_BUNDLE_IDENTIFIER = pro.nanzhi.AIVM0;
 				PRODUCT_NAME = AIVM;
 				SDKROOT = macosx;
 			};
